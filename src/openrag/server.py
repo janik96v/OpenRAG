@@ -81,8 +81,8 @@ def create_server() -> Server:
                         },
                         "min_similarity": {
                             "type": "number",
-                            "description": "Minimum similarity score threshold 0-1 (default: 0.1)",
-                            "default": 0.1,
+                            "description": "Minimum similarity score threshold 0-1 (default: 0.4)",
+                            "default": 0.4,
                         },
                     },
                     "required": ["query"],
