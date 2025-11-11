@@ -1,0 +1,20 @@
+# Development-only dependencies (extends requirements.txt)
+-r requirements.txt
+
+# Code quality
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.0.0
+pre-commit>=3.0.0
+
+# Testing extras
+pytest-xdist>=3.0.0  # Parallel test execution
+pytest-mock>=3.10.0
+coverage>=7.0.0
+
+# Documentation
+sphinx>=6.0.0
+sphinx-rtd-theme>=1.2.0
+
+# Type checking
+types-requests

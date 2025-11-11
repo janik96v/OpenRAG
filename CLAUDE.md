@@ -92,11 +92,13 @@ src/project/
 
 ### Conda Package Management
 
-This project uses conda package manager for Python package and environment management. If not already available, install a new conda environment called "OpenRAG". Use the python version 3.13
+This project uses conda package manager for Python package and environment management. If not already available, install a new conda environment called "OpenRAG".
+
+**IMPORTANT**: Use Python 3.12 (NOT 3.13) as PyTorch does not yet support Python 3.13.
 
 ```bash
-# Create a new conda environment "myenv" with Python x.x.x
-conda create -n OpenRAG python=3.13
+# Create a new conda environment "OpenRAG" with Python 3.12
+conda create -n OpenRAG python=3.12
 
 # Activate the environment
 conda activate myenv

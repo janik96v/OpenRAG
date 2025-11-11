@@ -1,0 +1,19 @@
+# Core MCP and RAG dependencies
+mcp
+chromadb
+torch>=1.11.0
+sentence-transformers
+pydantic
+pydantic-settings
+tiktoken
+
+# Development and testing
+pytest
+pytest-asyncio
+pytest-cov
+ruff
+mypy
+
+# Additional dependencies (installed by sentence-transformers)
+transformers
+numpy
