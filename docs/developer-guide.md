@@ -17,7 +17,7 @@ Guide for developers contributing to OpenRAG or extending its functionality.
 
 ### Prerequisites
 
-- Python 3.10+ (3.13 recommended per CLAUDE.md)
+- Python 3.10+ (3.12 recommended) 
 - Anaconda or Miniconda
 - Git
 - Code editor (VS Code, PyCharm, or similar)
@@ -31,7 +31,7 @@ git clone https://github.com/your-org/OpenRAG.git
 cd OpenRAG
 
 # Create development environment
-conda create -n OpenRAG python=3.13 -y
+conda create -n OpenRAG python=3.12 -y
 conda activate OpenRAG
 
 # Install dependencies
@@ -50,7 +50,7 @@ pytest tests/ -v
 
 ### Conda Environment
 
-OpenRAG uses conda for environment management (per CLAUDE.md):
+OpenRAG uses conda for environment management:
 
 ```bash
 # Activate environment
@@ -141,7 +141,7 @@ pytest tests/test_chunker.py::test_chunk_text -v
 
 ## Project Structure
 
-Following CLAUDE.md vertical slice architecture:
+Following vertical slice architecture:
 
 ```
 OpenRAG/
@@ -190,7 +190,6 @@ OpenRAG/
 
 ### File Organization Principles
 
-Per CLAUDE.md:
 - **Max 500 lines** per file
 - **Max 50 lines** per function
 - **Max 100 lines** per class
@@ -199,7 +198,7 @@ Per CLAUDE.md:
 
 ## Code Standards
 
-### Style Guide (CLAUDE.md)
+### Style Guide
 
 #### Python Style
 
@@ -357,7 +356,7 @@ logger.info(
 
 ### Test Organization
 
-Following CLAUDE.md TDD approach:
+Following TDD approach:
 
 ```
 tests/
@@ -734,7 +733,7 @@ pytest tests/test_file.py::test_name -v -s
 
 ### Git Workflow
 
-Following CLAUDE.md branching strategy:
+Following branching strategy:
 
 ```bash
 # Update main
@@ -757,8 +756,6 @@ git push origin feature/my-new-feature
 ```
 
 ### Commit Message Format
-
-Per CLAUDE.md:
 
 ```
 <type>(<scope>): <subject>
@@ -807,11 +804,9 @@ Closes #42
 - [ ] Type hints added
 - [ ] Docstrings complete
 - [ ] No linting errors
-- [ ] Follows CLAUDE.md conventions
 
 ## Related Documentation
 
-- [CLAUDE.md](../CLAUDE.md) - Development conventions
 - [Architecture](architecture.md) - System design
 - [API Reference](api-reference.md) - Tool specifications
 - [Testing Guide](TESTING.md) - Testing strategies
