@@ -151,6 +151,51 @@ async def ingest():
 result = asyncio.run(ingest())
 ```
 
+### Alternative: Ingest text directly (without file)
+
+If you've already extracted text from a document (e.g., from PDF using an LLM), you can ingest it directly:
+
+```python
+from src.openrag.tools.ingest import ingest_text_tool
+
+async def ingest_text():
+    # Initialize components
+    chunker = TextChunker(chunk_size=400, chunk_overlap=60)
+    embedding_model = EmbeddingModel(model_name="all-MiniLM-L6-v2")
+    vector_store = VectorStore(
+        persist_directory=Path("./chroma_db"),
+        embedding_model=embedding_model
+    )
+
+    # Ingest raw text content
+    text_content = """
+    Machine learning is a subset of AI that provides systems
+    the ability to automatically learn and improve from
+    experience without being explicitly programmed.
+    """
+
+    result = await ingest_text_tool(
+        text=text_content,
+        document_name="ml_notes.pdf",  # Any name/identifier
+        vector_store=vector_store,
+        chunker=chunker
+    )
+
+    print(f"✅ Text ingested!")
+    print(f"   Document ID: {result['document_id']}")
+    print(f"   Chunks: {result['chunk_count']}")
+    return result
+
+# Run
+result = asyncio.run(ingest_text())
+```
+
+This is useful when:
+- An LLM client has already parsed a PDF, DOCX, or other format
+- You want to ingest programmatically generated content
+- You're processing text from web scraping or APIs
+- You need to preprocess text before ingestion
+
 ### Query your document
 
 ```python
@@ -197,9 +242,13 @@ Expected output:
    processes by machines, especially computer systems...
 ```
 
-## Step 5: Use with Claude Desktop (Optional)
+## Step 5: Use with Claude Desktop or Claude Agent SDK (Optional)
 
-### Add to Claude Desktop Configuration
+### Add to MCP Configuration
+
+OpenRAG can be used as an MCP server with Claude Desktop or any Claude Agent SDK project.
+
+#### For Claude Desktop
 
 Edit your Claude Desktop config:
 
@@ -214,12 +263,58 @@ Add OpenRAG server:
   "mcpServers": {
     "openrag": {
       "command": "/path/to/anaconda3/envs/OpenRAG/bin/python",
-      "args": [
-        "-m",
-        "openrag.server"
-      ],
+      "args": ["-m", "openrag.server"]
+    }
+  }
+}
+```
+
+#### For Claude Agent SDK
+
+In your agent project directory:
+
+```bash
+# Add MCP server
+claude mcp add openrag -- /path/to/anaconda3/envs/OpenRAG/bin/python -m openrag.server
+```
+
+Or manually edit `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "openrag": {
+      "command": "/path/to/anaconda3/envs/OpenRAG/bin/python",
+      "args": ["-m", "openrag.server"]
+    }
+  }
+}
+```
+
+#### Find Your Python Path
+
+```bash
+conda activate OpenRAG
+which python  # macOS/Linux
+where python  # Windows
+```
+
+**Important**: Use the direct path to the Python executable in your OpenRAG conda environment, not `conda run`, as the latter doesn't work in non-interactive shell contexts.
+
+#### Customize Storage Location
+
+By default, OpenRAG stores the vector database in `./chroma_db` (relative to where the server runs). To customize the storage location:
+
+**Option 1: Environment Variables (Recommended)**
+
+```json
+{
+  "mcpServers": {
+    "openrag": {
+      "command": "/path/to/conda/envs/OpenRAG/bin/python",
+      "args": ["-m", "openrag.server"],
       "env": {
-        "CHROMA_DB_PATH": "/path/to/OpenRAG/chroma_db",
+        "CHROMA_DB_PATH": "/absolute/path/to/your/chroma_db",
         "EMBEDDING_MODEL": "all-mpnet-base-v2",
         "CHUNK_SIZE": "400",
         "CHUNK_OVERLAP": "60",
@@ -230,11 +325,26 @@ Add OpenRAG server:
 }
 ```
 
-**Get your Python path**:
-```bash
-conda activate OpenRAG
-which python
+**Option 2: Project-Specific Configuration**
+
+Use `cwd` to run the server from your project directory with a local `.env` file:
+
+```json
+{
+  "mcpServers": {
+    "openrag": {
+      "command": "/path/to/conda/envs/OpenRAG/bin/python",
+      "args": ["-m", "openrag.server"],
+      "cwd": "/path/to/your/project",
+      "env": {
+        "CHROMA_DB_PATH": "./data/chroma_db"
+      }
+    }
+  }
+}
 ```
+
+This allows each project to have its own vector database and configuration.
 
 ### Restart Claude Desktop
 
@@ -244,11 +354,26 @@ Restart Claude Desktop to load the MCP server.
 
 In Claude, you can now:
 
+**File-based ingestion:**
 ```
 Can you ingest this document: /Users/name/documents/notes.txt
+```
 
+**Text-based ingestion (when Claude has already read a PDF):**
+```
+I've read the contents of report.pdf. Can you ingest this text into OpenRAG
+with the name "Q4_Report.pdf"?
+```
+
+**Query documents:**
+```
 Search my documents for information about neural networks
 
+What does my documentation say about authentication?
+```
+
+**Manage documents:**
+```
 What documents do I have ingested?
 
 Delete the document with ID xyz-123
@@ -256,7 +381,7 @@ Delete the document with ID xyz-123
 Show me the system statistics
 ```
 
-Claude will automatically use the OpenRAG tools!
+Claude will automatically use the appropriate OpenRAG tools!
 
 ## Common Commands
 

@@ -9,7 +9,7 @@ An open-source MCP (Model Context Protocol) server for Retrieval Augmented Gener
 ## Features
 
 - **🔒 Privacy-First**: All data stored locally using ChromaDB
-- **📄 Document Ingestion**: Process .txt files with intelligent chunking
+- **📄 Document Ingestion**: Process .txt files OR ingest text directly (no file required)
 - **🔍 Semantic Search**: Natural language queries with similarity scoring
 - **⚡ Fast Embeddings**: Configurable models (all-mpnet-base-v2 default)
 - **🎯 Token-Aware Chunking**: Uses tiktoken for accurate token counting
@@ -75,13 +75,14 @@ Comprehensive documentation available in the [docs/](docs/) directory:
 
 ## MCP Tools
 
-OpenRAG exposes 5 MCP tools:
+OpenRAG exposes 6 MCP tools:
 
 1. **ingest_document**: Ingest .txt files into vector database
-2. **query_documents**: Semantic search over documents
-3. **list_documents**: List all ingested documents
-4. **delete_document**: Remove documents and chunks
-5. **get_stats**: System statistics
+2. **ingest_text**: Ingest raw text directly (bypasses file I/O)
+3. **query_documents**: Semantic search over documents
+4. **list_documents**: List all ingested documents
+5. **delete_document**: Remove documents and chunks
+6. **get_stats**: System statistics
 
 ## Configuration
 

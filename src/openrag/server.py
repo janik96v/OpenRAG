@@ -11,7 +11,7 @@ from .config import get_settings
 from .core.chunker import TextChunker
 from .core.embedder import EmbeddingModel
 from .core.vector_store import VectorStore
-from .tools.ingest import ingest_document_tool
+from .tools.ingest import ingest_document_tool, ingest_text_tool
 from .tools.manage import delete_document_tool, list_documents_tool
 from .tools.query import query_documents_tool
 from .tools.stats import get_stats_tool
@@ -59,6 +59,32 @@ def create_server() -> Server:
                         }
                     },
                     "required": ["file_path"],
+                },
+            ),
+            Tool(
+                name="ingest_text",
+                description=(
+                    "Ingest raw text content directly into the RAG system. "
+                    "Use this when the LLM client has already extracted/parsed content from "
+                    "documents (e.g., PDF, DOCX). The text will be chunked, embedded, and "
+                    "stored in the vector database."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": "Raw text content to ingest",
+                        },
+                        "document_name": {
+                            "type": "string",
+                            "description": (
+                                "Name/identifier for this document (e.g., 'report.pdf', "
+                                "'meeting_notes.docx')"
+                            ),
+                        },
+                    },
+                    "required": ["text", "document_name"],
                 },
             ),
             Tool(
@@ -155,6 +181,13 @@ def create_server() -> Server:
             if name == "ingest_document":
                 result = await ingest_document_tool(
                     file_path=arguments["file_path"],
+                    vector_store=vector_store,
+                    chunker=chunker,
+                )
+            elif name == "ingest_text":
+                result = await ingest_text_tool(
+                    text=arguments["text"],
+                    document_name=arguments["document_name"],
                     vector_store=vector_store,
                     chunker=chunker,
                 )

@@ -17,7 +17,7 @@ if ! command -v conda &> /dev/null; then
 fi
 
 # Check Python version requirement
-PYTHON_VERSION="3.13"
+PYTHON_VERSION="3.12"
 echo "✓ Conda found"
 
 # Check if environment already exists

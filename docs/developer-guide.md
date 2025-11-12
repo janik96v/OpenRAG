@@ -74,7 +74,7 @@ Create `.vscode/settings.json`:
 
 ```json
 {
-  "python.defaultInterpreterPath": "/path/to/anaconda3/envs/OpenRAG/bin/python",
+  "python.defaultInterpreterPath": "${env:CONDA_PREFIX}/envs/OpenRAG/bin/python",
   "python.linting.enabled": true,
   "python.linting.ruffEnabled": true,
   "python.formatting.provider": "black",
@@ -90,6 +90,8 @@ Create `.vscode/settings.json`:
   }
 }
 ```
+
+Find your conda prefix with: `conda info --base`
 
 #### PyCharm
 
@@ -632,6 +634,43 @@ async def test_my_new_tool(vector_store):
    - Update [User Guide](user-guide.md)
    - Update README.md
 
+#### Real Example: The `ingest_text` Tool
+
+The `ingest_text` tool was added to allow direct text ingestion without file I/O. This enables LLM clients to parse documents (PDF, DOCX, etc.) and send the extracted text directly to OpenRAG.
+
+**Design Decision**: Keep file-based and text-based ingestion separate rather than modifying the existing `ingest_document` tool. This follows the Single Responsibility Principle and makes the code easier to maintain.
+
+**Implementation highlights**:
+
+1. **New function** in `src/openrag/tools/ingest.py`:
+   - Accepts `text` (string) and `document_name` (identifier)
+   - Validates input (empty strings, type checking)
+   - Uses same chunking/embedding pipeline as file-based tool
+   - Returns same response format for consistency
+
+2. **Server registration** in `src/openrag/server.py`:
+   - Added to import: `from .tools.ingest import ingest_document_tool, ingest_text_tool`
+   - New Tool definition with clear description explaining use case
+   - Handler in `call_tool()` function
+
+3. **Comprehensive tests** in `tests/test_ingest_text.py`:
+   - Success cases (basic, unicode, large content)
+   - Error cases (empty text, invalid types, empty names)
+   - Edge cases (whitespace trimming, various document names)
+   - Integration test (ingest → search retrieval)
+
+4. **Documentation updates**:
+   - Added section in [Quick Start Guide](quick-start.md)
+   - Updated Claude usage examples
+   - This developer guide entry
+
+**Use Cases**:
+- LLM clients parse PDFs and send text to OpenRAG
+- Programmatically generated documentation
+- Web scraping results
+- API response text
+- Preprocessed content from other tools
+
 ### Adding Core Functionality
 
 1. Create module in `src/openrag/core/`
@@ -704,13 +743,47 @@ LOG_LEVEL=DEBUG
 
 ### Testing MCP Server
 
+#### Manual Testing
+
 ```bash
 # Start server manually
+conda activate OpenRAG
 python -m openrag.server
 
-# In another terminal, send MCP messages
-# (Use MCP inspector or client)
+# Server will listen on stdin/stdout for MCP messages
 ```
+
+#### Integration with Claude Desktop/Agent SDK
+
+For local testing, configure the MCP server:
+
+**Find your Python path:**
+```bash
+conda activate OpenRAG
+which python  # macOS/Linux
+where python  # Windows
+```
+
+**Add to MCP config:**
+
+For Claude Desktop (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "openrag": {
+      "command": "/path/to/conda/envs/OpenRAG/bin/python",
+      "args": ["-m", "openrag.server"]
+    }
+  }
+}
+```
+
+For Claude Agent SDK (`~/.claude.json`):
+```bash
+claude mcp add openrag -- /path/to/conda/envs/OpenRAG/bin/python -m openrag.server
+```
+
+**Important**: Do not use `conda run` as it doesn't work in non-interactive shell contexts. Use the direct Python interpreter path from your conda environment.
 
 ### Common Issues
 
