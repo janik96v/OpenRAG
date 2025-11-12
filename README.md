@@ -75,14 +75,13 @@ Comprehensive documentation available in the [docs/](docs/) directory:
 
 ## MCP Tools
 
-OpenRAG exposes 6 MCP tools:
+OpenRAG exposes 5 MCP tools:
 
-1. **ingest_document**: Ingest .txt files into vector database
-2. **ingest_text**: Ingest raw text directly (bypasses file I/O)
-3. **query_documents**: Semantic search over documents
-4. **list_documents**: List all ingested documents
-5. **delete_document**: Remove documents and chunks
-6. **get_stats**: System statistics
+1. **ingest_text**: Ingest text content directly (works with any format - TXT, PDF, DOCX, etc.)
+2. **query_documents**: Semantic search over documents
+3. **list_documents**: List all ingested documents
+4. **delete_document**: Remove documents and chunks
+5. **get_stats**: System statistics
 
 ## Configuration
 

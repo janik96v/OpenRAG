@@ -124,7 +124,7 @@ from pathlib import Path
 from src.openrag.core.chunker import TextChunker
 from src.openrag.core.embedder import EmbeddingModel
 from src.openrag.core.vector_store import VectorStore
-from src.openrag.tools.ingest import ingest_document_tool
+from src.openrag.tools.ingest import ingest_text_tool
 
 async def ingest():
     # Initialize components
@@ -135,9 +135,13 @@ async def ingest():
         embedding_model=embedding_model
     )
 
-    # Ingest document
-    result = await ingest_document_tool(
-        file_path="my_first_doc.txt",
+    # Read the document content
+    text_content = Path("my_first_doc.txt").read_text(encoding="utf-8")
+
+    # Ingest text
+    result = await ingest_text_tool(
+        text=text_content,
+        document_name="my_first_doc.txt",
         vector_store=vector_store,
         chunker=chunker
     )
@@ -151,50 +155,7 @@ async def ingest():
 result = asyncio.run(ingest())
 ```
 
-### Alternative: Ingest text directly (without file)
-
-If you've already extracted text from a document (e.g., from PDF using an LLM), you can ingest it directly:
-
-```python
-from src.openrag.tools.ingest import ingest_text_tool
-
-async def ingest_text():
-    # Initialize components
-    chunker = TextChunker(chunk_size=400, chunk_overlap=60)
-    embedding_model = EmbeddingModel(model_name="all-MiniLM-L6-v2")
-    vector_store = VectorStore(
-        persist_directory=Path("./chroma_db"),
-        embedding_model=embedding_model
-    )
-
-    # Ingest raw text content
-    text_content = """
-    Machine learning is a subset of AI that provides systems
-    the ability to automatically learn and improve from
-    experience without being explicitly programmed.
-    """
-
-    result = await ingest_text_tool(
-        text=text_content,
-        document_name="ml_notes.pdf",  # Any name/identifier
-        vector_store=vector_store,
-        chunker=chunker
-    )
-
-    print(f"✅ Text ingested!")
-    print(f"   Document ID: {result['document_id']}")
-    print(f"   Chunks: {result['chunk_count']}")
-    return result
-
-# Run
-result = asyncio.run(ingest_text())
-```
-
-This is useful when:
-- An LLM client has already parsed a PDF, DOCX, or other format
-- You want to ingest programmatically generated content
-- You're processing text from web scraping or APIs
-- You need to preprocess text before ingestion
+**Note**: This approach works with any text content - from files, PDFs parsed by LLMs, web scraping, APIs, or programmatically generated content.
 
 ### Query your document
 
@@ -354,13 +315,10 @@ Restart Claude Desktop to load the MCP server.
 
 In Claude, you can now:
 
-**File-based ingestion:**
+**Ingest documents:**
 ```
-Can you ingest this document: /Users/name/documents/notes.txt
-```
+Can you read /Users/name/documents/notes.txt and ingest it into OpenRAG?
 
-**Text-based ingestion (when Claude has already read a PDF):**
-```
 I've read the contents of report.pdf. Can you ingest this text into OpenRAG
 with the name "Q4_Report.pdf"?
 ```
@@ -381,7 +339,7 @@ Delete the document with ID xyz-123
 Show me the system statistics
 ```
 
-Claude will automatically use the appropriate OpenRAG tools!
+Claude will read the file content and use the `ingest_text` tool automatically!
 
 ## Common Commands
 

@@ -6,7 +6,7 @@ from pathlib import Path
 from openrag.core.chunker import TextChunker
 from openrag.core.embedder import EmbeddingModel
 from openrag.core.vector_store import VectorStore
-from openrag.tools.ingest import ingest_document_tool
+from openrag.tools.ingest import ingest_text_tool
 
 
 @pytest.mark.asyncio
@@ -20,9 +20,14 @@ async def test_ingest_document():
         embedding_model=embedding_model
     )
 
-    # Ingest document
-    result = await ingest_document_tool(
-        file_path="./tests/test_doc.txt",
+    # Read the test document
+    test_file = Path("./tests/test_doc.txt")
+    text_content = test_file.read_text(encoding="utf-8")
+
+    # Ingest text
+    result = await ingest_text_tool(
+        text=text_content,
+        document_name="test_doc.txt",
         vector_store=vector_store,
         chunker=chunker
     )

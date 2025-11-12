@@ -11,7 +11,7 @@ from .config import get_settings
 from .core.chunker import TextChunker
 from .core.embedder import EmbeddingModel
 from .core.vector_store import VectorStore
-from .tools.ingest import ingest_document_tool, ingest_text_tool
+from .tools.ingest import ingest_text_tool
 from .tools.manage import delete_document_tool, list_documents_tool
 from .tools.query import query_documents_tool
 from .tools.stats import get_stats_tool
@@ -44,23 +44,6 @@ def create_server() -> Server:
             List of tool definitions
         """
         return [
-            Tool(
-                name="ingest_document",
-                description=(
-                    "Ingest a .txt document into the RAG system. "
-                    "The document will be chunked, embedded, and stored in the vector database."
-                ),
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "file_path": {
-                            "type": "string",
-                            "description": "Absolute path to the .txt file to ingest",
-                        }
-                    },
-                    "required": ["file_path"],
-                },
-            ),
             Tool(
                 name="ingest_text",
                 description=(
@@ -178,13 +161,7 @@ def create_server() -> Server:
             ]
 
         try:
-            if name == "ingest_document":
-                result = await ingest_document_tool(
-                    file_path=arguments["file_path"],
-                    vector_store=vector_store,
-                    chunker=chunker,
-                )
-            elif name == "ingest_text":
+            if name == "ingest_text":
                 result = await ingest_text_tool(
                     text=arguments["text"],
                     document_name=arguments["document_name"],

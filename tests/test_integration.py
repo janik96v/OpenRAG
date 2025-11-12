@@ -1,8 +1,9 @@
 """Integration tests for OpenRAG end-to-end workflows."""
 
 import pytest
+from pathlib import Path
 
-from openrag.tools.ingest import ingest_document_tool
+from openrag.tools.ingest import ingest_text_tool
 from openrag.tools.manage import delete_document_tool, list_documents_tool
 from openrag.tools.query import query_documents_tool
 from openrag.tools.stats import get_stats_tool
@@ -11,9 +12,11 @@ from openrag.tools.stats import get_stats_tool
 @pytest.mark.asyncio
 async def test_full_workflow(sample_txt_file, vector_store, chunker, test_settings):
     """Test complete workflow: ingest -> query -> list -> delete."""
-    # 1. Ingest document
-    ingest_result = await ingest_document_tool(
-        file_path=str(sample_txt_file),
+    # 1. Read and ingest document
+    text_content = Path(sample_txt_file).read_text(encoding="utf-8")
+    ingest_result = await ingest_text_tool(
+        text=text_content,
+        document_name=Path(sample_txt_file).name,
         vector_store=vector_store,
         chunker=chunker,
     )
@@ -101,10 +104,11 @@ async def test_delete_nonexistent_document(vector_store):
 
 
 @pytest.mark.asyncio
-async def test_ingest_invalid_file(vector_store, chunker):
-    """Test ingesting an invalid file path."""
-    result = await ingest_document_tool(
-        file_path="/nonexistent/file.txt",
+async def test_ingest_invalid_text(vector_store, chunker):
+    """Test ingesting invalid text content."""
+    result = await ingest_text_tool(
+        text="",  # Empty text
+        document_name="test.txt",
         vector_store=vector_store,
         chunker=chunker,
     )

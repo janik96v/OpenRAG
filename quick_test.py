@@ -143,17 +143,16 @@ except Exception as e:
 print("\n🔄 Test 6: Testing async tools...")
 try:
     import asyncio
-    from openrag.tools.ingest import ingest_document_tool
+    from openrag.tools.ingest import ingest_text_tool
     from openrag.tools.query import query_documents_tool
     from openrag.tools.stats import get_stats_tool
 
-    # Create a test file
-    test_file = Path("./tests/test_chunk.txt")
-    test_file.write_text("""
+    # Test text content
+    test_text_content = """
     Python is a high-level programming language.
     It is widely used for web development, data science, and automation.
     Python's syntax is designed to be readable and straightforward.
-    """)
+    """
 
     async def test_async():
         # Reinitialize for clean state
@@ -164,14 +163,15 @@ try:
         ch = TextChunker(chunk_size=100, chunk_overlap=20)
 
         # Ingest
-        result = await ingest_document_tool(
-            file_path=str(test_file),
+        result = await ingest_text_tool(
+            text=test_text_content,
+            document_name="test_python.txt",
             vector_store=vs,
             chunker=ch,
         )
         assert result['status'] == 'success', f"Ingest failed: {result}"
         doc_id = result['document_id']
-        print(f"   - Ingested: {result['filename']} ({result['chunk_count']} chunks)")
+        print(f"   - Ingested: {result['document_name']} ({result['chunk_count']} chunks)")
 
         # Query
         result = await query_documents_tool(
