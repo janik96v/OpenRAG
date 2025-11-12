@@ -173,7 +173,7 @@ class VectorStore:
         self,
         query: str,
         n_results: int = 5,
-        min_similarity: float = 0.1,
+        min_similarity: float = 0.4,
     ) -> list[tuple[DocumentChunk, float]]:
         """
         Search for similar document chunks.
