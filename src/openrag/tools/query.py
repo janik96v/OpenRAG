@@ -2,7 +2,8 @@
 
 from typing import Any
 
-from ..core.vector_store import VectorStore
+from ..core.contextual_vector_store import ContextualVectorStore
+from ..models.contextual_schemas import RAGType
 from ..utils.logger import setup_logger
 from ..utils.validation import ValidationError, validate_max_results, validate_query
 
@@ -11,9 +12,10 @@ logger = setup_logger(__name__)
 
 async def query_documents_tool(
     query: str,
-    vector_store: VectorStore,
+    vector_store: ContextualVectorStore,
     max_results: int = 5,
     min_similarity: float = 0.1,
+    rag_type: str = "traditional",
 ) -> dict[str, Any]:
     """
     Search for relevant document chunks using natural language query.
@@ -23,9 +25,10 @@ async def query_documents_tool(
 
     Args:
         query: Natural language search query
-        vector_store: VectorStore instance
+        vector_store: ContextualVectorStore instance
         max_results: Maximum number of results to return (default: 5)
         min_similarity: Minimum similarity score threshold 0-1 (default: 0.1)
+        rag_type: Type of RAG to use ("traditional" or "contextual", default: "traditional")
 
     Returns:
         Dictionary with search results
@@ -55,11 +58,20 @@ async def query_documents_tool(
         # Validate max_results
         validated_max_results = validate_max_results(max_results)
 
+        # Validate rag_type
+        try:
+            rag_type_enum = RAGType(rag_type.lower())
+        except ValueError:
+            raise ValidationError(
+                f"Invalid rag_type '{rag_type}'. Must be 'traditional' or 'contextual'"
+            )
+
         # Perform search
-        logger.info(f"Searching for: '{validated_query[:100]}...'")
+        logger.info(f"Searching {rag_type} collection for: '{validated_query[:100]}...'")
         results = vector_store.search(
             query=validated_query,
             n_results=validated_max_results,
+            rag_type=rag_type_enum,
             min_similarity=min_similarity,
         )
 
@@ -75,14 +87,16 @@ async def query_documents_tool(
                     "content": chunk.content,
                     "similarity_score": round(similarity_score, 4),
                     "chunk_index": chunk.chunk_index,
+                    "rag_type": rag_type,
                 }
             )
 
-        logger.info(f"Found {len(formatted_results)} relevant chunks")
+        logger.info(f"Found {len(formatted_results)} relevant chunks in {rag_type} collection")
 
         return {
             "status": "success",
             "query": validated_query,
+            "rag_type": rag_type,
             "results": formatted_results,
             "total_results": len(formatted_results),
             "max_results_requested": validated_max_results,

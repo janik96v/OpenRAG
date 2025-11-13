@@ -9,18 +9,24 @@ from mcp.types import Tool
 
 from .config import get_settings
 from .core.chunker import TextChunker
+from .core.contextual_processor import ContextualProcessor
+from .core.contextual_vector_store import ContextualVectorStore
 from .core.embedder import EmbeddingModel
-from .core.vector_store import VectorStore
+from .core.ollama_client import OllamaClient
 from .tools.ingest import ingest_text_tool
 from .tools.manage import delete_document_tool, list_documents_tool
 from .tools.query import query_documents_tool
 from .tools.stats import get_stats_tool
+from .utils.async_tasks import BackgroundTaskManager
 from .utils.logger import configure_root_logger, setup_logger
 
 # Global instances (initialized in main)
-vector_store: VectorStore | None = None
+vector_store: ContextualVectorStore | None = None
 chunker: TextChunker | None = None
 embedding_model: EmbeddingModel | None = None
+ollama_client: OllamaClient | None = None
+contextual_processor: ContextualProcessor | None = None
+task_manager: BackgroundTaskManager | None = None
 settings = get_settings()
 
 logger = setup_logger(__name__)
@@ -74,7 +80,8 @@ def create_server() -> Server:
                 name="query_documents",
                 description=(
                     "Search for relevant document chunks using natural language query. "
-                    "Returns the most semantically similar chunks with similarity scores."
+                    "Returns the most semantically similar chunks with similarity scores. "
+                    "Supports both traditional and contextual RAG."
                 ),
                 inputSchema={
                     "type": "object",
@@ -92,6 +99,16 @@ def create_server() -> Server:
                             "type": "number",
                             "description": "Minimum similarity score threshold 0-1 (default: 0.4)",
                             "default": 0.4,
+                        },
+                        "rag_type": {
+                            "type": "string",
+                            "description": (
+                                "Type of RAG to use: 'traditional' (default) or 'contextual'. "
+                                "Contextual RAG provides better results by adding document context "
+                                "to each chunk."
+                            ),
+                            "enum": ["traditional", "contextual"],
+                            "default": "traditional",
                         },
                     },
                     "required": ["query"],
@@ -150,9 +167,23 @@ def create_server() -> Server:
         Returns:
             List of content items (text results)
         """
-        global vector_store, chunker, embedding_model, settings
+        global \
+            vector_store, \
+            chunker, \
+            embedding_model, \
+            ollama_client, \
+            contextual_processor, \
+            task_manager, \
+            settings
 
-        if vector_store is None or chunker is None or embedding_model is None:
+        if (
+            vector_store is None
+            or chunker is None
+            or embedding_model is None
+            or ollama_client is None
+            or contextual_processor is None
+            or task_manager is None
+        ):
             return [
                 {
                     "type": "text",
@@ -167,6 +198,8 @@ def create_server() -> Server:
                     document_name=arguments["document_name"],
                     vector_store=vector_store,
                     chunker=chunker,
+                    contextual_processor=contextual_processor,
+                    task_manager=task_manager,
                 )
             elif name == "query_documents":
                 result = await query_documents_tool(
@@ -174,6 +207,7 @@ def create_server() -> Server:
                     vector_store=vector_store,
                     max_results=arguments.get("max_results", 5),
                     min_similarity=arguments.get("min_similarity", 0.1),
+                    rag_type=arguments.get("rag_type", "traditional"),
                 )
             elif name == "list_documents":
                 result = await list_documents_tool(vector_store=vector_store)
@@ -223,13 +257,20 @@ async def main() -> None:
 
     Initializes all components and starts the server with stdio transport.
     """
-    global vector_store, chunker, embedding_model, settings
+    global \
+        vector_store, \
+        chunker, \
+        embedding_model, \
+        ollama_client, \
+        contextual_processor, \
+        task_manager, \
+        settings
 
     # Configure logging
     configure_root_logger(settings.log_level)
 
     logger.info("=" * 80)
-    logger.info("OpenRAG MCP Server Starting")
+    logger.info("OpenRAG MCP Server Starting (with Contextual RAG support)")
     logger.info("=" * 80)
 
     try:
@@ -249,11 +290,34 @@ async def main() -> None:
         logger.info(f"Loading embedding model: {settings.embedding_model}")
         embedding_model = EmbeddingModel(model_name=settings.embedding_model)
 
-        # Initialize vector store
-        logger.info(f"Initializing vector store at: {settings.chroma_db_path}")
-        vector_store = VectorStore(
+        # Initialize Ollama client for context generation
+        logger.info(f"Initializing Ollama client at: {settings.OLLAMA_BASE_URL}")
+        ollama_client = OllamaClient(
+            base_url=settings.OLLAMA_BASE_URL,
+            timeout=settings.OLLAMA_TIMEOUT,
+            max_retries=settings.OLLAMA_MAX_RETRIES,
+        )
+        logger.info(f"Ollama model: {settings.OLLAMA_CONTEXT_MODEL}")
+
+        # Initialize contextual processor
+        logger.info("Initializing contextual processor...")
+        contextual_processor = ContextualProcessor(
+            ollama_client=ollama_client,
+            context_model=settings.OLLAMA_CONTEXT_MODEL,
+            fallback_enabled=settings.OLLAMA_FALLBACK_ENABLED,
+        )
+
+        # Initialize task manager for background processing
+        logger.info("Initializing background task manager...")
+        task_manager = BackgroundTaskManager()
+
+        # Initialize contextual vector store (manages both traditional and contextual collections)
+        logger.info(f"Initializing contextual vector store at: {settings.chroma_db_path}")
+        vector_store = ContextualVectorStore(
             persist_directory=Path(settings.chroma_db_path),
             embedding_model=embedding_model,
+            base_collection_name=settings.collection_base_name,
+            max_batch_size=10000,
         )
 
         logger.info("All components initialized successfully")
@@ -261,6 +325,8 @@ async def main() -> None:
         logger.info(f"Embedding model: {settings.embedding_model}")
         logger.info(f"Chunk size: {settings.chunk_size} tokens")
         logger.info(f"Chunk overlap: {settings.chunk_overlap} tokens")
+        logger.info(f"Contextual RAG enabled with model: {settings.OLLAMA_CONTEXT_MODEL}")
+        logger.info(f"Background tasks: {task_manager.task_count}")
 
         # Create and run server
         logger.info("Starting MCP server with stdio transport...")

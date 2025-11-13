@@ -61,6 +61,81 @@ class Settings(BaseSettings):
         ),
     ]
 
+    # Ollama configuration for Contextual RAG
+    ollama_base_url: Annotated[
+        str,
+        Field(
+            default="http://localhost:11434",
+            description="Base URL for Ollama API",
+        ),
+    ]
+
+    ollama_context_model: Annotated[
+        str,
+        Field(
+            default="llama3.2:3b",
+            description="Ollama model to use for context generation",
+        ),
+    ]
+
+    ollama_timeout: Annotated[
+        float,
+        Field(
+            default=300.0,
+            ge=10.0,
+            le=600.0,
+            description="Timeout in seconds for Ollama API calls (5 minutes default)",
+        ),
+    ]
+
+    ollama_max_retries: Annotated[
+        int,
+        Field(
+            default=3,
+            ge=1,
+            le=10,
+            description="Maximum number of retry attempts for Ollama requests",
+        ),
+    ]
+
+    ollama_fallback_enabled: Annotated[
+        bool,
+        Field(
+            default=True,
+            description="Enable fallback context generation when Ollama fails",
+        ),
+    ]
+
+    # Contextual RAG configuration
+    contextual_batch_size: Annotated[
+        int,
+        Field(
+            default=10,
+            ge=1,
+            le=50,
+            description="Number of chunks to process concurrently for context generation",
+        ),
+    ]
+
+    contextual_chunk_size: Annotated[
+        int,
+        Field(
+            default=800,
+            ge=100,
+            le=2000,
+            description="Chunk size for contextual RAG (larger than traditional due to context overhead)",
+        ),
+    ]
+
+    # Collection naming
+    collection_base_name: Annotated[
+        str,
+        Field(
+            default="documents",
+            description="Base name for ChromaDB collections (will add _traditional_v1 or _contextual_v1)",
+        ),
+    ]
+
     @field_validator("chroma_db_path")
     @classmethod
     def validate_chroma_path(cls, v: str) -> str:
@@ -88,6 +163,51 @@ class Settings(BaseSettings):
         if v >= chunk_size:
             raise ValueError(f"Chunk overlap ({v}) must be less than chunk size ({chunk_size})")
         return v
+
+    @property
+    def STORAGE_PATH(self) -> Path:
+        """Get storage path as Path object for compatibility."""
+        return Path(self.chroma_db_path)
+
+    @property
+    def EMBEDDING_MODEL(self) -> str:
+        """Get embedding model name for compatibility."""
+        return self.embedding_model
+
+    @property
+    def CHUNK_SIZE(self) -> int:
+        """Get chunk size for compatibility."""
+        return self.chunk_size
+
+    @property
+    def CHUNK_OVERLAP(self) -> int:
+        """Get chunk overlap for compatibility."""
+        return self.chunk_overlap
+
+    @property
+    def OLLAMA_BASE_URL(self) -> str:
+        """Get Ollama base URL."""
+        return self.ollama_base_url
+
+    @property
+    def OLLAMA_CONTEXT_MODEL(self) -> str:
+        """Get Ollama context model."""
+        return self.ollama_context_model
+
+    @property
+    def OLLAMA_TIMEOUT(self) -> float:
+        """Get Ollama timeout."""
+        return self.ollama_timeout
+
+    @property
+    def OLLAMA_MAX_RETRIES(self) -> int:
+        """Get Ollama max retries."""
+        return self.ollama_max_retries
+
+    @property
+    def OLLAMA_FALLBACK_ENABLED(self) -> bool:
+        """Get Ollama fallback enabled."""
+        return self.ollama_fallback_enabled
 
 
 # Global settings instance
