@@ -2,14 +2,14 @@
 
 from typing import Any
 
-from ..core.vector_store import VectorStore
+from ..core.contextual_vector_store import ContextualVectorStore
 from ..utils.logger import setup_logger
 from ..utils.validation import ValidationError, validate_document_id
 
 logger = setup_logger(__name__)
 
 
-async def list_documents_tool(vector_store: VectorStore) -> dict[str, Any]:
+async def list_documents_tool(vector_store: ContextualVectorStore) -> dict[str, Any]:
     """
     List all ingested documents with metadata.
 
@@ -62,7 +62,7 @@ async def list_documents_tool(vector_store: VectorStore) -> dict[str, Any]:
 
 async def delete_document_tool(
     document_id: str,
-    vector_store: VectorStore,
+    vector_store: ContextualVectorStore,
 ) -> dict[str, Any]:
     """
     Delete a document and all its chunks from the vector database.

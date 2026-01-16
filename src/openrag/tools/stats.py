@@ -3,14 +3,14 @@
 from typing import Any
 
 from ..config import Settings
-from ..core.vector_store import VectorStore
+from ..core.contextual_vector_store import ContextualVectorStore
 from ..utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
 
 async def get_stats_tool(
-    vector_store: VectorStore,
+    vector_store: ContextualVectorStore,
     settings: Settings,
 ) -> dict[str, Any]:
     """
@@ -42,21 +42,28 @@ async def get_stats_tool(
     try:
         logger.info("Collecting system statistics")
 
-        # Get vector store stats
+        # Get vector store stats (both collections)
         store_stats = vector_store.get_stats()
 
         # Combine with configuration
         stats = {
-            "total_documents": store_stats.get("total_documents", 0),
-            "total_chunks": store_stats.get("total_chunks", 0),
+            "traditional": {
+                "documents": store_stats.get("traditional_documents", 0),
+                "chunks": store_stats.get("traditional_chunks", 0),
+            },
+            "contextual": {
+                "documents": store_stats.get("contextual_documents", 0),
+                "chunks": store_stats.get("contextual_chunks", 0),
+            },
             "storage_path": settings.chroma_db_path,
             "embedding_model": settings.embedding_model,
             "chunk_size": settings.chunk_size,
             "chunk_overlap": settings.chunk_overlap,
+            "ollama_model": settings.OLLAMA_CONTEXT_MODEL,
         }
 
         logger.info(
-            f"Statistics: {stats['total_documents']} documents, {stats['total_chunks']} chunks"
+            f"Statistics: Traditional={stats['traditional']}, Contextual={stats['contextual']}"
         )
 
         return {
