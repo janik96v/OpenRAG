@@ -1,12 +1,13 @@
 """Unit tests for Graph RAG processor."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from openrag.core.graph_processor import GraphProcessor, GraphProcessorError
 from openrag.core.ollama_client import OllamaClient, OllamaError
 from openrag.models.graph_schemas import Entity, Relationship
-from openrag.models.schemas import DocumentChunk, DocumentMetadata
+from openrag.models.schemas import DocumentChunk
 
 
 @pytest.fixture
@@ -211,7 +212,6 @@ class TestGraphProcessor:
 
         # Should extract capitalized words
         assert len(entities) > 0
-        entity_names = [e.name for e in entities]
 
         # Check for entities with confidence < 1.0 (fallback indicator)
         assert all(e.confidence <= 0.7 for e in entities)
