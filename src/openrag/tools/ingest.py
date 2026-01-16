@@ -19,26 +19,26 @@ async def ingest_text_tool(
     document_name: str,
     vector_store: ContextualVectorStore,
     chunker: TextChunker,
-    contextual_processor: ContextualProcessor,
-    task_manager: BackgroundTaskManager,
+    contextual_processor: ContextualProcessor | None,
+    task_manager: BackgroundTaskManager | None,
 ) -> dict[str, Any]:
     """
-    Ingest raw text content directly into both traditional and contextual RAG systems.
+    Ingest raw text content directly into traditional and optionally contextual RAG systems.
 
     This tool accepts raw text content, chunks it, and:
     1. Immediately stores it in the traditional RAG collection (blocking)
-    2. Starts background processing for contextual RAG (non-blocking)
+    2. If available, starts background processing for contextual RAG (non-blocking)
 
     The function returns immediately after traditional ingestion completes, while
-    contextual processing continues in the background.
+    contextual processing continues in the background (if enabled).
 
     Args:
         text: Raw text content to ingest
         document_name: Name/identifier for this document (e.g., "report.pdf")
         vector_store: ContextualVectorStore instance
         chunker: TextChunker instance
-        contextual_processor: ContextualProcessor instance
-        task_manager: BackgroundTaskManager instance
+        contextual_processor: ContextualProcessor instance (None if Ollama unavailable)
+        task_manager: BackgroundTaskManager instance (None if Ollama unavailable)
 
     Returns:
         Dictionary with ingestion results and metadata
@@ -108,19 +108,24 @@ async def ingest_text_tool(
         logger.info(f"Adding document to traditional collection: {document_name}")
         vector_store.add_document(document, rag_type=RAGType.TRADITIONAL)
 
-        # Step 2: Start CONTEXTUAL processing in background (non-blocking)
-        logger.info(f"Starting contextual processing in background for: {document_name}")
+        # Step 2: Start CONTEXTUAL processing in background (non-blocking) if available
+        contextual_status = "not_available"
+        if contextual_processor is not None and task_manager is not None:
+            logger.info(f"Starting contextual processing in background for: {document_name}")
 
-        # CRITICAL: Use task_manager.create_task() to prevent garbage collection
-        task_manager.create_task(
-            _process_contextual_async(
-                document=document,
-                full_document_text=text,  # CRITICAL: Pass full document for context
-                vector_store=vector_store,
-                contextual_processor=contextual_processor,
-            ),
-            name=f"contextual_{document.document_id}",
-        )
+            # CRITICAL: Use task_manager.create_task() to prevent garbage collection
+            task_manager.create_task(
+                _process_contextual_async(
+                    document=document,
+                    full_document_text=text,  # CRITICAL: Pass full document for context
+                    vector_store=vector_store,
+                    contextual_processor=contextual_processor,
+                ),
+                name=f"contextual_{document.document_id}",
+            )
+            contextual_status = "processing_in_background"
+        else:
+            logger.info(f"Contextual RAG not available for {document_name} (Ollama not configured)")
 
         # Update status
         document.metadata.status = DocumentStatus.COMPLETED
@@ -131,6 +136,15 @@ async def ingest_text_tool(
         )
 
         # Return immediately (don't await background task!)
+        message_parts = [
+            f"Successfully ingested {document.metadata.filename} "
+            f"with {len(document.chunks)} chunks to traditional store."
+        ]
+        if contextual_status == "processing_in_background":
+            message_parts.append("Contextual processing running in background.")
+        elif contextual_status == "not_available":
+            message_parts.append("Contextual RAG not available (Ollama not configured).")
+
         return {
             "status": "success",
             "document_id": document.document_id,
@@ -138,12 +152,8 @@ async def ingest_text_tool(
             "chunk_count": len(document.chunks),
             "text_size_bytes": document.metadata.file_size,
             "traditional_ingestion": "completed",
-            "contextual_ingestion": "processing_in_background",
-            "message": (
-                f"Successfully ingested {document.metadata.filename} "
-                f"with {len(document.chunks)} chunks to traditional store. "
-                f"Contextual processing running in background."
-            ),
+            "contextual_ingestion": contextual_status,
+            "message": " ".join(message_parts),
         }
 
     except ValidationError as e:

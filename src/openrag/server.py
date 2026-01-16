@@ -176,14 +176,7 @@ def create_server() -> Server:
             task_manager, \
             settings
 
-        if (
-            vector_store is None
-            or chunker is None
-            or embedding_model is None
-            or ollama_client is None
-            or contextual_processor is None
-            or task_manager is None
-        ):
+        if vector_store is None or chunker is None or embedding_model is None:
             return [
                 {
                     "type": "text",
@@ -270,7 +263,7 @@ async def main() -> None:
     configure_root_logger(settings.log_level)
 
     logger.info("=" * 80)
-    logger.info("OpenRAG MCP Server Starting (with Contextual RAG support)")
+    logger.info("OpenRAG MCP Server Starting")
     logger.info("=" * 80)
 
     try:
@@ -290,26 +283,37 @@ async def main() -> None:
         logger.info(f"Loading embedding model: {settings.embedding_model}")
         embedding_model = EmbeddingModel(model_name=settings.embedding_model)
 
-        # Initialize Ollama client for context generation
-        logger.info(f"Initializing Ollama client at: {settings.OLLAMA_BASE_URL}")
-        ollama_client = OllamaClient(
-            base_url=settings.OLLAMA_BASE_URL,
-            timeout=settings.OLLAMA_TIMEOUT,
-            max_retries=settings.OLLAMA_MAX_RETRIES,
-        )
-        logger.info(f"Ollama model: {settings.OLLAMA_CONTEXT_MODEL}")
+        # Initialize Ollama client for context generation (optional)
+        try:
+            logger.info(f"Initializing Ollama client at: {settings.OLLAMA_BASE_URL}")
+            ollama_client = OllamaClient(
+                base_url=settings.OLLAMA_BASE_URL,
+                timeout=settings.OLLAMA_TIMEOUT,
+                max_retries=settings.OLLAMA_MAX_RETRIES,
+            )
+            logger.info(f"Ollama model: {settings.OLLAMA_CONTEXT_MODEL}")
 
-        # Initialize contextual processor
-        logger.info("Initializing contextual processor...")
-        contextual_processor = ContextualProcessor(
-            ollama_client=ollama_client,
-            context_model=settings.OLLAMA_CONTEXT_MODEL,
-            fallback_enabled=settings.OLLAMA_FALLBACK_ENABLED,
-        )
+            # Initialize contextual processor
+            logger.info("Initializing contextual processor...")
+            contextual_processor = ContextualProcessor(
+                ollama_client=ollama_client,
+                context_model=settings.OLLAMA_CONTEXT_MODEL,
+                fallback_enabled=settings.OLLAMA_FALLBACK_ENABLED,
+            )
 
-        # Initialize task manager for background processing
-        logger.info("Initializing background task manager...")
-        task_manager = BackgroundTaskManager()
+            # Initialize task manager for background processing
+            logger.info("Initializing background task manager...")
+            task_manager = BackgroundTaskManager()
+
+            logger.info("Contextual RAG components initialized successfully")
+        except Exception as e:
+            logger.warning(
+                f"Failed to initialize Ollama client: {e}. "
+                "Contextual RAG features will be disabled. Traditional RAG remains available."
+            )
+            ollama_client = None
+            contextual_processor = None
+            task_manager = None
 
         # Initialize contextual vector store (manages both traditional and contextual collections)
         logger.info(f"Initializing contextual vector store at: {settings.chroma_db_path}")
@@ -320,13 +324,17 @@ async def main() -> None:
             max_batch_size=10000,
         )
 
-        logger.info("All components initialized successfully")
+        logger.info("Core components initialized successfully")
         logger.info(f"ChromaDB path: {settings.chroma_db_path}")
         logger.info(f"Embedding model: {settings.embedding_model}")
         logger.info(f"Chunk size: {settings.chunk_size} tokens")
         logger.info(f"Chunk overlap: {settings.chunk_overlap} tokens")
-        logger.info(f"Contextual RAG enabled with model: {settings.OLLAMA_CONTEXT_MODEL}")
-        logger.info(f"Background tasks: {task_manager.task_count}")
+
+        if contextual_processor is not None and task_manager is not None:
+            logger.info(f"Contextual RAG enabled with model: {settings.OLLAMA_CONTEXT_MODEL}")
+            logger.info(f"Background tasks: {task_manager.task_count}")
+        else:
+            logger.info("Contextual RAG disabled (Ollama not available)")
 
         # Create and run server
         logger.info("Starting MCP server with stdio transport...")
