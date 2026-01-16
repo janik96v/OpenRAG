@@ -1,8 +1,9 @@
 """Integration tests for Graph RAG end-to-end functionality."""
 
-import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from openrag.core.chunker import TextChunker
 from openrag.core.embedder import EmbeddingModel

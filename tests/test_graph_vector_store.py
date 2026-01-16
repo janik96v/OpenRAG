@@ -1,8 +1,9 @@
 """Unit tests for Graph Vector Store."""
 
-import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from openrag.core.embedder import EmbeddingModel
 from openrag.core.graph_processor import GraphProcessor
