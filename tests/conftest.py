@@ -9,6 +9,7 @@ import pytest
 from openrag.config import Settings
 from openrag.core.chunker import TextChunker
 from openrag.core.embedder import EmbeddingModel
+from openrag.core.graph_vector_store import GraphVectorStore
 from openrag.core.vector_store import VectorStore
 from openrag.models.schemas import Document, DocumentChunk, DocumentMetadata, DocumentStatus
 
@@ -125,3 +126,16 @@ def sample_document(sample_text: str) -> Document:
     document.metadata.chunk_count = len(document.chunks)
 
     return document
+
+
+@pytest.fixture
+def graph_vector_store(
+    chroma_dir: Path, embedding_model: EmbeddingModel
+) -> GraphVectorStore:
+    """Create a GraphVectorStore instance for testing (without graph processor)."""
+    return GraphVectorStore(
+        persist_directory=chroma_dir,
+        embedding_model=embedding_model,
+        graph_processor=None,  # No graph processor for basic tests
+        base_collection_name="test_documents",
+    )

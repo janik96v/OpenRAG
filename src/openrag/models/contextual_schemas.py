@@ -15,6 +15,7 @@ class RAGType(str, Enum):
 
     TRADITIONAL = "traditional"
     CONTEXTUAL = "contextual"
+    GRAPH = "graph"
 
 
 class ContextualDocumentChunk(BaseModel):

@@ -123,7 +123,84 @@ class Settings(BaseSettings):
             default=800,
             ge=100,
             le=2000,
-            description="Chunk size for contextual RAG (larger than traditional due to context overhead)",
+            description=(
+                "Chunk size for contextual RAG (larger than traditional "
+                "due to context overhead)"
+            ),
+        ),
+    ]
+
+    # Graph RAG configuration
+    graph_enabled: Annotated[
+        bool, Field(default=True, description="Enable Graph RAG functionality")
+    ]
+
+    graph_database: Annotated[
+        str,
+        Field(
+            default="neo4j",
+            description="Graph database backend (neo4j recommended for production)",
+        ),
+    ]
+
+    # Neo4j connection settings
+    neo4j_uri: Annotated[
+        str,
+        Field(
+            default="neo4j://localhost:7687",
+            description="Neo4j database URI",
+        ),
+    ]
+
+    neo4j_username: Annotated[
+        str,
+        Field(
+            default="neo4j",
+            description="Neo4j username",
+        ),
+    ]
+
+    neo4j_password: Annotated[
+        str,
+        Field(
+            default="password",
+            description="Neo4j password",
+        ),
+    ]
+
+    neo4j_database: Annotated[
+        str,
+        Field(
+            default="neo4j",
+            description="Neo4j database name",
+        ),
+    ]
+
+    graph_entity_model: Annotated[
+        str,
+        Field(
+            default="llama3.2:3b",
+            description="Ollama model for entity extraction",
+        ),
+    ]
+
+    graph_max_hops: Annotated[
+        int,
+        Field(
+            default=2,
+            ge=1,
+            le=5,
+            description="Maximum graph traversal hops for queries",
+        ),
+    ]
+
+    graph_batch_size: Annotated[
+        int,
+        Field(
+            default=10,
+            ge=1,
+            le=50,
+            description="Batch size for entity extraction",
         ),
     ]
 
@@ -132,7 +209,10 @@ class Settings(BaseSettings):
         str,
         Field(
             default="documents",
-            description="Base name for ChromaDB collections (will add _traditional_v1 or _contextual_v1)",
+            description=(
+                "Base name for ChromaDB collections "
+                "(will add _traditional_v1, _contextual_v1, or _graph_v1)"
+            ),
         ),
     ]
 
@@ -208,6 +288,51 @@ class Settings(BaseSettings):
     def OLLAMA_FALLBACK_ENABLED(self) -> bool:
         """Get Ollama fallback enabled."""
         return self.ollama_fallback_enabled
+
+    @property
+    def GRAPH_ENABLED(self) -> bool:
+        """Get Graph RAG enabled status."""
+        return self.graph_enabled
+
+    @property
+    def GRAPH_DATABASE(self) -> str:
+        """Get graph database backend."""
+        return self.graph_database
+
+    @property
+    def GRAPH_ENTITY_MODEL(self) -> str:
+        """Get Ollama model for entity extraction."""
+        return self.graph_entity_model
+
+    @property
+    def GRAPH_MAX_HOPS(self) -> int:
+        """Get maximum graph traversal hops."""
+        return self.graph_max_hops
+
+    @property
+    def GRAPH_BATCH_SIZE(self) -> int:
+        """Get graph processing batch size."""
+        return self.graph_batch_size
+
+    @property
+    def NEO4J_URI(self) -> str:
+        """Get Neo4j URI."""
+        return self.neo4j_uri
+
+    @property
+    def NEO4J_USERNAME(self) -> str:
+        """Get Neo4j username."""
+        return self.neo4j_username
+
+    @property
+    def NEO4J_PASSWORD(self) -> str:
+        """Get Neo4j password."""
+        return self.neo4j_password
+
+    @property
+    def NEO4J_DATABASE(self) -> str:
+        """Get Neo4j database name."""
+        return self.neo4j_database
 
 
 # Global settings instance
