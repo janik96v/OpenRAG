@@ -207,10 +207,11 @@ marimo/_lsp/
 __marimo__/
 
 
-# User-specific folders
+# User-specific folders and files
 
 .claude
 .serena
+.playwright
 examples
 PRPs
 docs/lab_journal.md
