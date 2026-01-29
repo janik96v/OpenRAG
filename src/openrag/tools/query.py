@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from ..core.contextual_vector_store import ContextualVectorStore
+from ..core.graph_vector_store import GraphVectorStore
 from ..models.contextual_schemas import RAGType
 from ..utils.logger import setup_logger
 from ..utils.validation import ValidationError, validate_max_results, validate_query
@@ -12,23 +12,26 @@ logger = setup_logger(__name__)
 
 async def query_documents_tool(
     query: str,
-    vector_store: ContextualVectorStore,
+    vector_store: GraphVectorStore,
     max_results: int = 5,
     min_similarity: float = 0.1,
     rag_type: str = "traditional",
+    max_hops: int = 2,
 ) -> dict[str, Any]:
     """
     Search for relevant document chunks using natural language query.
 
     This tool performs semantic search over ingested documents and returns
-    the most relevant chunks with similarity scores.
+    the most relevant chunks with similarity scores. For Graph RAG, it also
+    performs graph traversal to find related entities and chunks.
 
     Args:
         query: Natural language search query
-        vector_store: ContextualVectorStore instance
+        vector_store: GraphVectorStore instance
         max_results: Maximum number of results to return (default: 5)
         min_similarity: Minimum similarity score threshold 0-1 (default: 0.1)
-        rag_type: Type of RAG to use ("traditional" or "contextual", default: "traditional")
+        rag_type: Type of RAG to use ("traditional", "contextual", or "graph")
+        max_hops: Maximum graph traversal hops for Graph RAG (default: 2)
 
     Returns:
         Dictionary with search results
@@ -37,6 +40,7 @@ async def query_documents_tool(
         {
             "status": "success",
             "query": "How to train a model?",
+            "rag_type": "graph",
             "results": [
                 {
                     "chunk_id": "...",
@@ -63,16 +67,17 @@ async def query_documents_tool(
             rag_type_enum = RAGType(rag_type.lower())
         except ValueError:
             raise ValidationError(
-                f"Invalid rag_type '{rag_type}'. Must be 'traditional' or 'contextual'"
+                f"Invalid rag_type '{rag_type}'. Must be 'traditional', 'contextual', or 'graph'"
             )
 
         # Perform search
         logger.info(f"Searching {rag_type} collection for: '{validated_query[:100]}...'")
-        results = vector_store.search(
+        results = await vector_store.search(
             query=validated_query,
             n_results=validated_max_results,
             rag_type=rag_type_enum,
             min_similarity=min_similarity,
+            max_hops=max_hops if rag_type_enum == RAGType.GRAPH else 2,
         )
 
         # Format results
