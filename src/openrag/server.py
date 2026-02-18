@@ -10,8 +10,9 @@ from mcp.types import Tool
 from .config import get_settings
 from .core.chunker import TextChunker
 from .core.contextual_processor import ContextualProcessor
-from .core.contextual_vector_store import ContextualVectorStore
 from .core.embedder import EmbeddingModel
+from .core.graph_processor import GraphProcessor
+from .core.graph_vector_store import GraphVectorStore
 from .core.ollama_client import OllamaClient
 from .tools.ingest import ingest_text_tool
 from .tools.manage import delete_document_tool, list_documents_tool
@@ -21,11 +22,12 @@ from .utils.async_tasks import BackgroundTaskManager
 from .utils.logger import configure_root_logger, setup_logger
 
 # Global instances (initialized in main)
-vector_store: ContextualVectorStore | None = None
+vector_store: GraphVectorStore | None = None
 chunker: TextChunker | None = None
 embedding_model: EmbeddingModel | None = None
 ollama_client: OllamaClient | None = None
 contextual_processor: ContextualProcessor | None = None
+graph_processor: GraphProcessor | None = None
 task_manager: BackgroundTaskManager | None = None
 settings = get_settings()
 
@@ -81,7 +83,7 @@ def create_server() -> Server:
                 description=(
                     "Search for relevant document chunks using natural language query. "
                     "Returns the most semantically similar chunks with similarity scores. "
-                    "Supports both traditional and contextual RAG."
+                    "Supports traditional, contextual, and graph RAG."
                 ),
                 inputSchema={
                     "type": "object",
@@ -103,12 +105,22 @@ def create_server() -> Server:
                         "rag_type": {
                             "type": "string",
                             "description": (
-                                "Type of RAG to use: 'traditional' (default) or 'contextual'. "
-                                "Contextual RAG provides better results by adding document context "
-                                "to each chunk."
+                                "Type of RAG to use: 'traditional' (default), 'contextual', "
+                                "or 'graph'. Contextual RAG adds document context to chunks. "
+                                "Graph RAG uses entity relationships for multi-hop reasoning."
                             ),
-                            "enum": ["traditional", "contextual"],
+                            "enum": ["traditional", "contextual", "graph"],
                             "default": "traditional",
+                        },
+                        "max_hops": {
+                            "type": "integer",
+                            "description": (
+                                "Maximum graph traversal hops for Graph RAG (default: 2, "
+                                "range: 1-5). Only used when rag_type is 'graph'."
+                            ),
+                            "default": 2,
+                            "minimum": 1,
+                            "maximum": 5,
                         },
                     },
                     "required": ["query"],
@@ -192,6 +204,7 @@ def create_server() -> Server:
                     vector_store=vector_store,
                     chunker=chunker,
                     contextual_processor=contextual_processor,
+                    graph_processor=graph_processor,
                     task_manager=task_manager,
                 )
             elif name == "query_documents":
@@ -201,6 +214,7 @@ def create_server() -> Server:
                     max_results=arguments.get("max_results", 5),
                     min_similarity=arguments.get("min_similarity", 0.1),
                     rag_type=arguments.get("rag_type", "traditional"),
+                    max_hops=arguments.get("max_hops", 2),
                 )
             elif name == "list_documents":
                 result = await list_documents_tool(vector_store=vector_store)
@@ -256,6 +270,7 @@ async def main() -> None:
         embedding_model, \
         ollama_client, \
         contextual_processor, \
+        graph_processor, \
         task_manager, \
         settings
 
@@ -315,11 +330,46 @@ async def main() -> None:
             contextual_processor = None
             task_manager = None
 
-        # Initialize contextual vector store (manages both traditional and contextual collections)
-        logger.info(f"Initializing contextual vector store at: {settings.chroma_db_path}")
-        vector_store = ContextualVectorStore(
+        # Initialize Graph RAG processor (optional)
+        try:
+            if settings.GRAPH_ENABLED and ollama_client is not None:
+                logger.info("Initializing Graph RAG processor...")
+                logger.info(f"Neo4j URI: {settings.NEO4J_URI}")
+                logger.info(f"Entity extraction model: {settings.GRAPH_ENTITY_MODEL}")
+
+                graph_processor = GraphProcessor(
+                    ollama_client=ollama_client,
+                    neo4j_uri=settings.NEO4J_URI,
+                    neo4j_username=settings.NEO4J_USERNAME,
+                    neo4j_password=settings.NEO4J_PASSWORD,
+                    neo4j_database=settings.NEO4J_DATABASE,
+                    entity_model=settings.GRAPH_ENTITY_MODEL,
+                    fallback_enabled=settings.OLLAMA_FALLBACK_ENABLED,
+                )
+
+                # Initialize Neo4j connection
+                await graph_processor.initialize()
+
+                logger.info("Graph RAG processor initialized successfully")
+            else:
+                logger.info(
+                    "Graph RAG disabled (requires graph_enabled=true and Ollama client)"
+                )
+                graph_processor = None
+        except Exception as e:
+            logger.warning(
+                f"Failed to initialize Graph RAG processor: {e}. "
+                "Graph RAG features will be disabled. "
+                "Traditional and Contextual RAG remain available."
+            )
+            graph_processor = None
+
+        # Initialize graph vector store (manages traditional, contextual, and graph collections)
+        logger.info(f"Initializing graph vector store at: {settings.chroma_db_path}")
+        vector_store = GraphVectorStore(
             persist_directory=Path(settings.chroma_db_path),
             embedding_model=embedding_model,
+            graph_processor=graph_processor,
             base_collection_name=settings.collection_base_name,
             max_batch_size=10000,
         )
@@ -336,6 +386,12 @@ async def main() -> None:
         else:
             logger.info("Contextual RAG disabled (Ollama not available)")
 
+        if graph_processor is not None:
+            logger.info(f"Graph RAG enabled with entity model: {settings.GRAPH_ENTITY_MODEL}")
+            logger.info(f"Graph max hops: {settings.GRAPH_MAX_HOPS}")
+        else:
+            logger.info("Graph RAG disabled (requires Ollama and Neo4j)")
+
         # Create and run server
         logger.info("Starting MCP server with stdio transport...")
         server = create_server()
@@ -350,6 +406,14 @@ async def main() -> None:
         logger.error(f"Server error: {str(e)}", exc_info=True)
         raise
     finally:
+        # Cleanup graph processor connection
+        if graph_processor is not None:
+            try:
+                await graph_processor.close()
+                logger.info("Graph processor connection closed")
+            except Exception as e:
+                logger.error(f"Error closing graph processor: {e}")
+
         logger.info("OpenRAG MCP Server stopped")
         logger.info("=" * 80)
 
