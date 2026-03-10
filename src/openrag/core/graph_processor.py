@@ -25,7 +25,9 @@ class GraphProcessor:
     """Processor for extracting entities, relationships, and building knowledge graphs."""
 
     # Entity extraction prompt template (XML format for structured output)
-    ENTITY_EXTRACTION_PROMPT = """<document>
+    ENTITY_EXTRACTION_PROMPT = """Extract entities and relationships from the text chunk below.
+
+<document>
 {full_document}
 </document>
 
@@ -33,31 +35,29 @@ class GraphProcessor:
 {chunk_content}
 </chunk>
 
-Extract all entities and their relationships from the chunk above.
+INSTRUCTIONS:
+1. Extract all entities from the chunk
+2. Identify relationships between entities
+3. Use ONLY these entity types: PERSON, ORGANIZATION, LOCATION, CONCEPT, DATE, EVENT
+4. Use ONLY these relationship types: WORKS_AT, LOCATED_IN, COLLABORATES_WITH, PARTICIPATES_IN, PRESENTS_AT, PARTNERS_WITH
 
-Entity types: PERSON, ORGANIZATION, LOCATION, CONCEPT, DATE, EVENT
-
-Provide output in this exact format:
+OUTPUT FORMAT (you MUST include both sections):
 <entities>
-- [PERSON] Full Name
-- [ORGANIZATION] Company Name
-- [LOCATION] City, Country
-- [CONCEPT] Technical Term
-- [DATE] Time Reference
-- [EVENT] Event Name
+- [PERSON] Dr. Sarah Chen
+- [ORGANIZATION] MIT AI Lab
+- [LOCATION] Cambridge Massachusetts
 </entities>
 
 <relationships>
-- Entity1 [WORKS_AT] Entity2
-- Entity1 [LOCATED_IN] Entity2
-- Entity1 [PARTICIPATES_IN] Entity2
+- Dr. Sarah Chen [WORKS_AT] MIT AI Lab
+- MIT AI Lab [LOCATED_IN] Cambridge Massachusetts
 </relationships>
 
-Answer only with entities and relationships, nothing else."""
+IMPORTANT: Always include both <entities> and <relationships> sections, even if one is empty."""
 
     def __init__(
         self,
-        ollama_client: OllamaClient,
+        ollama_client: Optional[OllamaClient],
         neo4j_uri: str,
         neo4j_username: str,
         neo4j_password: str,
@@ -69,7 +69,7 @@ Answer only with entities and relationships, nothing else."""
         Initialize the graph processor with Neo4j connection.
 
         Args:
-            ollama_client: Ollama client for LLM-based entity extraction
+            ollama_client: Ollama client for LLM-based entity extraction (can be set later)
             neo4j_uri: Neo4j database URI (e.g., 'neo4j://localhost:7687')
             neo4j_username: Neo4j username
             neo4j_password: Neo4j password
@@ -149,7 +149,14 @@ Answer only with entities and relationships, nothing else."""
             Tuple of (entities, relationships)
         """
         try:
-            logger.debug(f"Extracting entities from chunk {chunk.chunk_id}")
+            # Check if Ollama client is available
+            if self.ollama_client is None:
+                logger.warning(
+                    f"Ollama client not set, using fallback extraction for chunk {chunk.chunk_id}"
+                )
+                if self.fallback_enabled:
+                    return await self._fallback_entity_extraction(chunk)
+                raise GraphProcessorError("Ollama client not initialized")
 
             # Create prompt
             prompt = self.ENTITY_EXTRACTION_PROMPT.format(
@@ -164,16 +171,23 @@ Answer only with entities and relationships, nothing else."""
                 max_tokens=500,
             )
 
+            # Log raw LLM response for debugging
+            logger.debug(f"LLM response for chunk {chunk.chunk_id}:\n{response[:500]}")
+
             # Parse entities and relationships from response
             entities = self._parse_entities(response, chunk.chunk_id)
             relationships = self._parse_relationships(
                 response, entities, chunk.chunk_id
             )
 
-            logger.debug(
+            logger.info(
                 f"Extracted {len(entities)} entities and "
                 f"{len(relationships)} relationships from chunk {chunk.chunk_id}"
             )
+            if entities:
+                logger.debug(f"Entity names: {[e.name for e in entities]}")
+            if relationships:
+                logger.debug(f"Relationship types: {[r.relationship_type for r in relationships]}")
 
             return entities, relationships
 
@@ -235,8 +249,11 @@ Answer only with entities and relationships, nothing else."""
 
         rel_text = rel_match.group(1)
 
-        # Create entity name to ID mapping
+        # Create entity name to ID mapping (both exact and partial matches)
         entity_map = {e.name: e.entity_id for e in entities}
+
+        # Also create lowercase mapping for fuzzy matching
+        entity_map_lower = {e.name.lower(): e.entity_id for e in entities}
 
         # Parse each relationship line: "- Entity1 [REL_TYPE] Entity2"
         for line in rel_text.strip().split("\n"):
@@ -250,9 +267,9 @@ Answer only with entities and relationships, nothing else."""
                 source_name = source_name.strip()
                 target_name = target_name.strip()
 
-                # Find entity IDs
-                source_id = entity_map.get(source_name)
-                target_id = entity_map.get(target_name)
+                # Find entity IDs - try exact match first, then case-insensitive
+                source_id = entity_map.get(source_name) or entity_map_lower.get(source_name.lower())
+                target_id = entity_map.get(target_name) or entity_map_lower.get(target_name.lower())
 
                 if source_id and target_id:
                     relationships.append(
@@ -263,6 +280,11 @@ Answer only with entities and relationships, nothing else."""
                             source_chunk_id=chunk_id,
                             confidence=0.9,
                         )
+                    )
+                else:
+                    logger.debug(
+                        f"Skipping relationship '{source_name} [{rel_type}] {target_name}' - "
+                        f"entities not found (source_id={source_id}, target_id={target_id})"
                     )
 
         return relationships
@@ -375,15 +397,17 @@ Answer only with entities and relationships, nothing else."""
                     """
                     MERGE (e:Entity {name: $name})
                     SET e.type = $type,
-                        e.confidence = $confidence
+                        e.confidence = $confidence,
+                        e.document_id = $document_id
                     WITH e
                     MATCH (c:Chunk {chunk_id: $chunk_id})
                     MERGE (e)-[:MENTIONED_IN]->(c)
-                    RETURN id(e) as entity_id
+                    RETURN elementId(e) as entity_id
                     """,
                     name=entity.name,
                     type=entity.entity_type,
                     confidence=entity.confidence,
+                    document_id=chunk.document_id,
                     chunk_id=chunk.chunk_id,
                 )
 
@@ -403,11 +427,11 @@ Answer only with entities and relationships, nothing else."""
                 if source_neo4j_id and target_neo4j_id:
                     result = await session.run(
                         f"""
-                        MATCH (source:Entity) WHERE id(source) = $source_id
-                        MATCH (target:Entity) WHERE id(target) = $target_id
+                        MATCH (source:Entity) WHERE elementId(source) = $source_id
+                        MATCH (target:Entity) WHERE elementId(target) = $target_id
                         MERGE (source)-[r:{rel.relationship_type}]->(target)
                         SET r.confidence = $confidence
-                        RETURN id(r) as rel_id
+                        RETURN elementId(r) as rel_id
                         """,
                         source_id=source_neo4j_id,
                         target_id=target_neo4j_id,
@@ -451,6 +475,7 @@ Answer only with entities and relationships, nothing else."""
 
         for chunk in chunks:
             try:
+                
                 # Extract entities and relationships
                 entities, relationships = await self.extract_entities_and_relationships(
                     chunk=chunk, full_document_text=full_document_text
@@ -480,6 +505,8 @@ Answer only with entities and relationships, nothing else."""
 
             except Exception as e:
                 logger.error(f"Failed to process chunk {chunk.chunk_id}: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
                 # Continue with other chunks
                 continue
 

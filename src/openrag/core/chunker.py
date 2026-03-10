@@ -5,6 +5,7 @@ from typing import Any
 import tiktoken
 
 from ..utils.logger import setup_logger
+from ..models.schemas import DocumentChunk
 
 logger = setup_logger(__name__)
 
@@ -89,6 +90,8 @@ class TextChunker:
         """
         if not text or not text.strip():
             return []
+        
+
 
         chunks: list[str] = []
         current_chunks = self._split_text_recursive(text, self.separators)

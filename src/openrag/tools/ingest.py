@@ -112,7 +112,14 @@ async def ingest_text_tool(
 
         # Step 1: Add to TRADITIONAL collection immediately (blocking)
         logger.info(f"Adding document to traditional collection: {document_name}")
-        vector_store.add_document(document, rag_type=RAGType.TRADITIONAL)
+
+        # Check if vector_store supports rag_type parameter (GraphVectorStore/ContextualVectorStore)
+        # vs base VectorStore
+        if isinstance(vector_store, GraphVectorStore):
+            vector_store.add_document(document, rag_type=RAGType.TRADITIONAL)
+        else:
+            # Base VectorStore doesn't have rag_type parameter
+            vector_store.add_document(document)
 
         # Step 2: Start CONTEXTUAL processing in background (non-blocking) if available
         contextual_status = "not_available"

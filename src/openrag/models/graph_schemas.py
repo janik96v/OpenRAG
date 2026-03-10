@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .contextual_schemas import ContextualChunk
+from .contextual_schemas import ContextualDocumentChunk
 from .schemas import DocumentChunk
 
 
@@ -105,10 +105,10 @@ class Relationship(BaseModel):
     )
 
 
-class GraphChunk(ContextualChunk):
+class GraphChunk(ContextualDocumentChunk):
     """Document chunk enhanced with graph information.
 
-    Extends ContextualChunk to add entity and relationship data extracted
+    Extends ContextualDocumentChunk to add entity and relationship data extracted
     from the chunk. Stores a serialized subgraph for efficient querying.
 
     Attributes:

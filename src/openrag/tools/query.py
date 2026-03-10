@@ -72,13 +72,23 @@ async def query_documents_tool(
 
         # Perform search
         logger.info(f"Searching {rag_type} collection for: '{validated_query[:100]}...'")
-        results = await vector_store.search(
-            query=validated_query,
-            n_results=validated_max_results,
-            rag_type=rag_type_enum,
-            min_similarity=min_similarity,
-            max_hops=max_hops if rag_type_enum == RAGType.GRAPH else 2,
-        )
+
+        # Check if vector_store supports rag_type parameter (GraphVectorStore)
+        # vs base VectorStore
+        if isinstance(vector_store, GraphVectorStore):
+            results = await vector_store.search(
+                query=validated_query,
+                n_results=validated_max_results,
+                rag_type=rag_type_enum,
+                min_similarity=min_similarity,
+                max_hops=max_hops if rag_type_enum == RAGType.GRAPH else 2,
+            )
+        else:
+            # Base VectorStore doesn't have rag_type parameter
+            results = vector_store.search(
+                query=validated_query,
+                n_results=validated_max_results,
+            )
 
         # Format results
         formatted_results = []

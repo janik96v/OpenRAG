@@ -173,10 +173,10 @@ class GraphVectorStore(ContextualVectorStore):
                 # Add any additional chunk metadata
                 for key, value in chunk.metadata.items():
                     if value is not None:
-                        metadata[key] = self._validate_metadata_value(value)
+                        metadata[key] = value
 
                 # Validate metadata before adding
-                metadata = self._validate_metadata_for_chromadb(metadata)
+                metadata = self._validate_metadata_for_chromadb(metadata, chunk.chunk_id)
                 metadatas.append(metadata)
 
             # Add to collection in batches
@@ -245,7 +245,7 @@ class GraphVectorStore(ContextualVectorStore):
             collection = self._collections[rag_type]
 
             # Generate query embedding
-            query_embedding = self.embedding_model.embed_query(query)
+            query_embedding = self.embedding_model.embed_text(query)
 
             # Search collection
             results = collection.query(
@@ -306,20 +306,44 @@ class GraphVectorStore(ContextualVectorStore):
         """
         if not self.graph_processor or not self.graph_processor.driver:
             logger.warning("GraphProcessor not available, falling back to vector search")
+            # Use TRADITIONAL to avoid infinite recursion
             return await self.search(
                 query=query,
                 n_results=n_results,
-                rag_type=RAGType.GRAPH,
+                rag_type=RAGType.TRADITIONAL,
                 min_similarity=min_similarity,
             )
 
-        # Step 1: Vector search for initial chunks
-        initial_results = await self.search(
-            query=query,
+        # Step 1: Vector search for initial chunks (use TRADITIONAL to avoid recursion)
+        # We'll search the graph collection directly below instead of recursing
+        collection = self._collections[RAGType.GRAPH]
+        query_embedding = self.embedding_model.embed_text(query)
+
+        results = collection.query(
+            query_embeddings=[query_embedding],
             n_results=n_results * 2,  # Get more for expansion
-            rag_type=RAGType.GRAPH,
-            min_similarity=min_similarity,
+            include=["documents", "metadatas", "distances"],
         )
+
+        # Convert to chunks with scores
+        initial_results = []
+        if results["ids"] and results["ids"][0]:
+            for idx in range(len(results["ids"][0])):
+                chunk_id = results["ids"][0][idx]
+                content = results["documents"][0][idx]
+                metadata = results["metadatas"][0][idx]
+                distance = results["distances"][0][idx]
+                similarity = 1 - distance
+
+                if similarity >= min_similarity:
+                    chunk = DocumentChunk(
+                        chunk_id=chunk_id,
+                        document_id=metadata.get("document_id", ""),
+                        content=content,
+                        chunk_index=metadata.get("chunk_index", 0),
+                        metadata=metadata,
+                    )
+                    initial_results.append((chunk, float(similarity)))
 
         if not initial_results:
             return []
