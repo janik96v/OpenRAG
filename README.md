@@ -1,10 +1,12 @@
 # OpenRAG - Multi-Strategy RAG MCP Server
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
 An open-source MCP (Model Context Protocol) server for Retrieval Augmented Generation (RAG) over personal documents. Supports **three RAG strategies** running in parallel: Traditional RAG, Contextual RAG, and Graph RAG. Built with ChromaDB, Neo4j, sentence-transformers, and designed for local-first, privacy-preserving document search.
+
+**Perfect for use with Claude Code and Claude Desktop.**
 
 ## Features
 
@@ -38,60 +40,65 @@ An open-source MCP (Model Context Protocol) server for Retrieval Augmented Gener
 
 ## Quick Start
 
-### Automated Setup (Recommended)
-
-Following CLAUDE.md conventions:
+### 1. Install OpenRAG (5 minutes)
 
 ```bash
-# Clone repository
+# Clone or navigate to OpenRAG directory
 cd /path/to/OpenRAG
 
-# Run automated setup (creates conda environment "OpenRAG")
+# Run automated setup (creates conda environment "OpenRAG" with Python 3.12)
 ./setup_environment.sh
 
 # Activate environment
 conda activate OpenRAG
-
-# Configure (optional)
-cp .env.example .env
-
-# Run server
-python -m openrag.server
 ```
 
-### Manual Setup
+### 2. Configure for Claude Code (3 minutes)
 
-```bash
-# Create conda environment
-conda create -n OpenRAG python=3.13 -y
-conda activate OpenRAG
+Edit `~/.claude/config.json`:
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Or install from pyproject.toml
-pip install -e ".[dev]"
-
-# Configure
-cp .env.example .env
-
-# Test
-python quick_test.py
+```json
+{
+  "mcpServers": {
+    "openrag": {
+      "command": "/path/to/anaconda3/envs/OpenRAG/bin/python",
+      "args": ["-m", "openrag.server"],
+      "env": {
+        "CHROMA_DB_PATH": "/absolute/path/to/your/chroma_db",
+        "EMBEDDING_MODEL": "all-mpnet-base-v2"
+      }
+    }
+  }
+}
 ```
+
+Find your Python path: `conda activate OpenRAG && which python`
+
+**Important**: Use absolute paths, not relative paths!
+
+### 3. Test in Claude Code (2 minutes)
+
+Restart Claude Code, then try:
+
+```
+Ingest this text with name "test.txt":
+OpenRAG supports traditional, contextual, and graph RAG strategies.
+
+Query OpenRAG for "RAG strategies"
+```
+
+Done! See [Quick Start Guide](docs/quick-start.md) for Contextual and Graph RAG setup.
 
 ## Documentation
 
-Comprehensive documentation available in the [docs/](docs/) directory:
-
-- **[Quick Start Guide](docs/quick-start.md)** - Get started in 10 minutes
-- **[Installation Guide](docs/INSTALLATION.md)** - Detailed setup instructions
-- **[User Guide](docs/user-guide.md)** - Complete usage guide
-- **[API Reference](docs/api-reference.md)** - MCP tools documentation
-- **[Configuration Reference](docs/configuration.md)** - All configuration options
+**Essential Reading**:
+- **[Installation Guide](docs/installation.md)** - Complete setup and MCP configuration
+- **[Quick Start Guide](docs/quick-start.md)** - Get started in 15 minutes
 - **[Architecture Overview](docs/architecture.md)** - System design and components
-- **[Developer Guide](docs/developer-guide.md)** - Contributing to OpenRAG
-- **[Troubleshooting](docs/troubleshooting.md)** - Common issues and solutions
-- **[FAQ](docs/faq.md)** - Frequently asked questions
+
+**Development**:
+- **[CLAUDE.md](CLAUDE.md)** - Development conventions (read this first!)
+- **[Lab Journal](docs/lab_journal.md)** - Research notes and decisions
 
 ## MCP Tools
 
@@ -139,19 +146,13 @@ GRAPH_ENTITY_MODEL=llama3.2:3b
 GRAPH_MAX_HOPS=2
 ```
 
-### Quick Setup
+### RAG Strategy Setup
 
-**Traditional RAG only** (no external dependencies):
-- Just ChromaDB and embeddings - works out of the box
-
-**+ Contextual RAG**:
-- Install [Ollama](https://ollama.ai/)
-- Run: `ollama pull llama3.2:3b`
-
-**+ Graph RAG**:
-- Install Ollama (above)
-- Install [Neo4j](https://neo4j.com/download/)
-- Configure Neo4j credentials in `.env`
+| Strategy | Requirements | Setup Time |
+|----------|--------------|------------|
+| **Traditional** | None | 0 min (works out of the box) |
+| **Contextual** | + Ollama | +5 min ([guide](docs/quick-start.md#step-4-enable-contextual-rag-optional-5-minutes)) |
+| **Graph** | + Ollama + Neo4j | +10 min ([guide](docs/quick-start.md#step-5-enable-graph-rag-optional-10-minutes)) |
 
 ## Development
 

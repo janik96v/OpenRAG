@@ -1,443 +1,343 @@
 # Quick Start Guide
 
-Get OpenRAG up and running in under 10 minutes.
+Get OpenRAG up and running in Claude Code in under 15 minutes.
+
+## Overview
+
+This guide will help you:
+1. Install OpenRAG and dependencies
+2. Configure it as an MCP server in Claude Code
+3. Test basic functionality with all three RAG strategies
 
 ## Prerequisites
 
-- Anaconda or Miniconda installed
+- Conda installed
+- Claude Code installed
 - 10+ GB free disk space
-- Internet connection (for initial setup)
 
-## Step 1: Installation (5 minutes)
+## Step 1: Install OpenRAG (5 minutes)
 
-Run the automated setup script:
-
-```bash
+\`\`\`bash
+# Navigate to OpenRAG directory
 cd /path/to/OpenRAG
+
+# Run automated setup
 ./setup_environment.sh
-```
 
-This will:
-- Create conda environment "OpenRAG" with Python 3.12
-- Install all dependencies
-- Set up the project
+# When prompted:
+# - Install dev dependencies: y (recommended)
+# - Run verification: y (recommended)
 
-**Alternative - Manual Setup**:
-```bash
-conda create -n OpenRAG python=3.12 -y
+# This creates conda environment "OpenRAG" with Python 3.12
+# and installs all required packages
+\`\`\`
+
+**Verify**:
+\`\`\`bash
 conda activate OpenRAG
-pip install -r requirements.txt
-```
+python --version  # Should show Python 3.12.x
+\`\`\`
 
-## Step 2: Configuration (1 minute)
+## Step 2: Configure MCP Server (3 minutes)
 
-Create your configuration file:
+### Find Python Path
 
-```bash
-cp .env.example .env
-```
-
-Default configuration works out of the box. Optionally edit `.env`:
-
-```bash
-# .env file
-CHROMA_DB_PATH=./chroma_db
-EMBEDDING_MODEL=all-mpnet-base-v2    # Best quality
-CHUNK_SIZE=400
-CHUNK_OVERLAP=60
-LOG_LEVEL=INFO
-```
-
-## Step 3: Quick Test (2 minutes)
-
-Verify everything works:
-
-```bash
+\`\`\`bash
 conda activate OpenRAG
-python quick_test.py
-```
+which python
+# Copy the output (e.g., /opt/anaconda3/envs/OpenRAG/bin/python)
+\`\`\`
 
-Expected output:
-```
-================================================================================
-OPENRAG QUICK TEST
-================================================================================
+### Configure Claude Code
 
-📦 Test 1: Testing imports...
-✅ All imports successful
+Claude Code stores MCP servers **per-project** in `~/.claude.json`. The easiest way to add OpenRAG is via the CLI:
 
-⚙️  Test 2: Testing configuration...
-✅ Settings loaded
+\`\`\`bash
+claude mcp add openrag \
+  --scope project \
+  -- /opt/anaconda3/envs/OpenRAG/bin/python -m openrag.server
+\`\`\`
 
-🔪 Test 3: Testing text chunker...
-✅ Chunker working
+Replace `/opt/anaconda3/envs/OpenRAG/bin/python` with YOUR Python path from above.
 
-🧮 Test 4: Testing embedding model...
-✅ Embedding model loaded
+**Alternatively**, you can edit `~/.claude.json` directly. Find your project entry under the `projects` key and add the `openrag` entry to its `mcpServers` object:
 
-💾 Test 5: Testing vector store...
-✅ Vector store initialized
-
-🔄 Test 6: Testing async tools...
-✅ Async tools working
-
-================================================================================
-✅ ALL TESTS PASSED!
-================================================================================
-```
-
-## Step 4: Your First Document (3 minutes)
-
-### Create a test document
-
-```bash
-cat > my_first_doc.txt << 'EOF'
-# Introduction to Artificial Intelligence
-
-Artificial Intelligence (AI) is the simulation of human intelligence
-processes by machines, especially computer systems. These processes
-include learning, reasoning, and self-correction.
-
-## Machine Learning
-
-Machine learning is a subset of AI that provides systems the ability
-to automatically learn and improve from experience without being
-explicitly programmed.
-
-## Applications
-
-AI is being used in various fields including:
-- Healthcare for diagnosis and treatment
-- Finance for fraud detection
-- Autonomous vehicles
-- Natural language processing
-EOF
-```
-
-### Ingest the document
-
-Start Python and run:
-
-```python
-import asyncio
-from pathlib import Path
-from src.openrag.core.chunker import TextChunker
-from src.openrag.core.embedder import EmbeddingModel
-from src.openrag.core.vector_store import VectorStore
-from src.openrag.tools.ingest import ingest_text_tool
-
-async def ingest():
-    # Initialize components
-    chunker = TextChunker(chunk_size=400, chunk_overlap=60)
-    embedding_model = EmbeddingModel(model_name="all-MiniLM-L6-v2")
-    vector_store = VectorStore(
-        persist_directory=Path("./chroma_db"),
-        embedding_model=embedding_model
-    )
-
-    # Read the document content
-    text_content = Path("my_first_doc.txt").read_text(encoding="utf-8")
-
-    # Ingest text
-    result = await ingest_text_tool(
-        text=text_content,
-        document_name="my_first_doc.txt",
-        vector_store=vector_store,
-        chunker=chunker
-    )
-
-    print(f"✅ Document ingested!")
-    print(f"   Document ID: {result['document_id']}")
-    print(f"   Chunks: {result['chunk_count']}")
-    return result
-
-# Run
-result = asyncio.run(ingest())
-```
-
-**Note**: This approach works with any text content - from files, PDFs parsed by LLMs, web scraping, APIs, or programmatically generated content.
-
-### Query your document
-
-```python
-from src.openrag.tools.query import query_documents_tool
-
-async def query():
-    # Initialize components (same as above)
-    embedding_model = EmbeddingModel(model_name="all-MiniLM-L6-v2")
-    vector_store = VectorStore(
-        persist_directory=Path("./chroma_db"),
-        embedding_model=embedding_model
-    )
-
-    # Search
-    result = await query_documents_tool(
-        query="What is machine learning?",
-        vector_store=vector_store,
-        max_results=3
-    )
-
-    print(f"\n🔍 Query: What is machine learning?")
-    print(f"   Found {result['total_results']} results:\n")
-
-    for i, res in enumerate(result['results'], 1):
-        print(f"{i}. Score: {res['similarity_score']:.3f}")
-        print(f"   {res['content'][:150]}...\n")
-
-# Run
-asyncio.run(query())
-```
-
-Expected output:
-```
-🔍 Query: What is machine learning?
-   Found 2 results:
-
-1. Score: 0.856
-   Machine learning is a subset of AI that provides systems the ability
-   to automatically learn and improve from experience without being
-   explicitly programmed...
-
-2. Score: 0.734
-   Artificial Intelligence (AI) is the simulation of human intelligence
-   processes by machines, especially computer systems...
-```
-
-## Step 5: Use with Claude Desktop or Claude Agent SDK (Optional)
-
-### Add to MCP Configuration
-
-OpenRAG can be used as an MCP server with Claude Desktop or any Claude Agent SDK project.
-
-#### For Claude Desktop
-
-Edit your Claude Desktop config:
-
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-
-Add OpenRAG server:
-
-```json
-{
-  "mcpServers": {
-    "openrag": {
-      "command": "/path/to/anaconda3/envs/OpenRAG/bin/python",
-      "args": ["-m", "openrag.server"]
+\`\`\`json
+"mcpServers": {
+  "openrag": {
+    "type": "stdio",
+    "command": "/opt/anaconda3/envs/OpenRAG/bin/python",
+    "args": ["-m", "openrag.server"],
+    "env": {
+      "CHROMA_DB_PATH": "/path/to/OpenRAG/chroma_db",
+      "EMBEDDING_MODEL": "all-mpnet-base-v2",
+      "LOG_LEVEL": "INFO"
     }
   }
 }
-```
+\`\`\`
 
-#### For Claude Agent SDK
+**Important**:
+- Replace `command` with YOUR Python path from above
+- Set `CHROMA_DB_PATH` to an absolute path where you want to store data
+- `~/.claude/config.json` does **not** exist — `~/.claude.json` is the correct file
 
-In your agent project directory:
+### Restart Claude Code
 
-```bash
-# Add MCP server
-claude mcp add openrag -- /path/to/anaconda3/envs/OpenRAG/bin/python -m openrag.server
-```
+Completely quit and restart Claude Code for changes to take effect.
 
-Or manually edit `~/.claude.json`:
+## Step 3: Test Traditional RAG (2 minutes)
 
-```json
-{
-  "mcpServers": {
-    "openrag": {
-      "command": "/path/to/anaconda3/envs/OpenRAG/bin/python",
-      "args": ["-m", "openrag.server"]
-    }
+In Claude Code, try:
+
+\`\`\`
+List available MCP tools
+\`\`\`
+
+You should see 5 OpenRAG tools. Now test ingestion and query:
+
+\`\`\`
+Please ingest the following text with name "ai_intro.txt":
+
+Artificial Intelligence (AI) is the simulation of human intelligence by machines.
+Machine learning is a subset of AI that enables systems to learn from data.
+Deep learning uses neural networks with multiple layers to process information.
+Natural language processing allows machines to understand and generate human language.
+\`\`\`
+
+After successful ingestion, query:
+
+\`\`\`
+Query OpenRAG for "what is machine learning"
+\`\`\`
+
+You should get relevant results with similarity scores!
+
+## Step 4: Enable Contextual RAG (Optional, 5 minutes)
+
+Contextual RAG adds document-level context to improve accuracy.
+
+### Install Ollama
+
+\`\`\`bash
+# Install Ollama
+brew install ollama  # macOS
+
+# Start Ollama
+ollama serve  # Keep this running
+
+# In a new terminal, pull model
+ollama pull llama3.2:3b
+\`\`\`
+
+### Update MCP Config
+
+Edit the `openrag` entry in `~/.claude.json` to add Ollama settings:
+
+\`\`\`json
+"openrag": {
+  "type": "stdio",
+  "command": "/opt/anaconda3/envs/OpenRAG/bin/python",
+  "args": ["-m", "openrag.server"],
+  "env": {
+    "CHROMA_DB_PATH": "/path/to/OpenRAG/chroma_db",
+    "EMBEDDING_MODEL": "all-mpnet-base-v2",
+    "OLLAMA_BASE_URL": "http://localhost:11434",
+    "OLLAMA_CONTEXT_MODEL": "llama3.2:3b",
+    "LOG_LEVEL": "INFO"
   }
 }
-```
+\`\`\`
 
-#### Find Your Python Path
+### Restart and Test
 
-```bash
-conda activate OpenRAG
-which python  # macOS/Linux
-where python  # Windows
-```
+Restart Claude Code, then:
 
-**Important**: Use the direct path to the Python executable in your OpenRAG conda environment, not `conda run`, as the latter doesn't work in non-interactive shell contexts.
+\`\`\`
+Query OpenRAG using contextual RAG for "machine learning"
+\`\`\`
 
-#### Customize Storage Location
+Contextual RAG provides better accuracy for complex queries by including document-level context.
 
-By default, OpenRAG stores the vector database in `./chroma_db` (relative to where the server runs). To customize the storage location:
+## Step 5: Enable Graph RAG (Optional, 10 minutes)
 
-**Option 1: Environment Variables (Recommended)**
+Graph RAG extracts entities and relationships for advanced reasoning.
 
-```json
-{
-  "mcpServers": {
-    "openrag": {
-      "command": "/path/to/conda/envs/OpenRAG/bin/python",
-      "args": ["-m", "openrag.server"],
-      "env": {
-        "CHROMA_DB_PATH": "/absolute/path/to/your/chroma_db",
-        "EMBEDDING_MODEL": "all-mpnet-base-v2",
-        "CHUNK_SIZE": "400",
-        "CHUNK_OVERLAP": "60",
-        "LOG_LEVEL": "INFO"
-      }
-    }
+### Install Neo4j
+
+\`\`\`bash
+# Install Neo4j
+brew install neo4j  # macOS
+
+# Start Neo4j
+brew services start neo4j
+
+# Open browser to set password
+open http://localhost:7474
+# Login: neo4j / neo4j
+# Set new password (remember it!)
+\`\`\`
+
+### Update MCP Config
+
+Edit the `openrag` entry in `~/.claude.json` to add Graph RAG settings:
+
+\`\`\`json
+"openrag": {
+  "type": "stdio",
+  "command": "/opt/anaconda3/envs/OpenRAG/bin/python",
+  "args": ["-m", "openrag.server"],
+  "env": {
+    "CHROMA_DB_PATH": "/path/to/OpenRAG/chroma_db",
+    "EMBEDDING_MODEL": "all-mpnet-base-v2",
+    "OLLAMA_BASE_URL": "http://localhost:11434",
+    "OLLAMA_CONTEXT_MODEL": "llama3.2:3b",
+    "GRAPH_ENABLED": "true",
+    "NEO4J_URI": "neo4j://localhost:7687",
+    "NEO4J_USERNAME": "neo4j",
+    "NEO4J_PASSWORD": "your_password_here",
+    "GRAPH_ENTITY_MODEL": "llama3.2:3b",
+    "GRAPH_MAX_HOPS": "2",
+    "LOG_LEVEL": "INFO"
   }
 }
-```
+\`\`\`
 
-**Option 2: Project-Specific Configuration**
+### Restart and Test
 
-Use `cwd` to run the server from your project directory with a local `.env` file:
+Restart Claude Code, then ingest a document with entities:
 
-```json
-{
-  "mcpServers": {
-    "openrag": {
-      "command": "/path/to/conda/envs/OpenRAG/bin/python",
-      "args": ["-m", "openrag.server"],
-      "cwd": "/path/to/your/project",
-      "env": {
-        "CHROMA_DB_PATH": "./data/chroma_db"
-      }
-    }
-  }
-}
-```
+\`\`\`
+Ingest this text with name "research_team.txt":
 
-This allows each project to have its own vector database and configuration.
+Dr. Sarah Chen leads the AI research team at MIT.
+She collaborates with Prof. James Wilson from Stanford University.
+Their recent paper on neural networks was published in Nature.
+The research was funded by the National Science Foundation.
+\`\`\`
 
-### Restart Claude Desktop
+**Note**: Graph processing takes 3-5 minutes as it extracts entities and relationships using the LLM.
 
-Restart Claude Desktop to load the MCP server.
+After processing completes, query with Graph RAG:
 
-### Use in Claude
+\`\`\`
+Query OpenRAG using graph RAG for "who works at MIT"
+\`\`\`
 
-In Claude, you can now:
+Graph RAG will traverse the knowledge graph to find entities and their relationships!
 
-**Ingest documents:**
-```
-Can you read /Users/name/documents/notes.txt and ingest it into OpenRAG?
+## Common Tasks
 
-I've read the contents of report.pdf. Can you ingest this text into OpenRAG
-with the name "Q4_Report.pdf"?
-```
+### Check System Status
 
-**Query documents:**
-```
-Search my documents for information about neural networks
+\`\`\`
+Get OpenRAG statistics
+\`\`\`
 
-What does my documentation say about authentication?
-```
+Shows document count, chunk count, and configuration.
 
-**Manage documents:**
-```
-What documents do I have ingested?
+### List All Documents
 
-Delete the document with ID xyz-123
+\`\`\`
+List all documents in OpenRAG
+\`\`\`
 
-Show me the system statistics
-```
+### Delete a Document
 
-Claude will read the file content and use the `ingest_text` tool automatically!
+\`\`\`
+Delete document with ID [document_id] from OpenRAG
+\`\`\`
 
-## Common Commands
+### Query with Different RAG Types
 
-### Activate environment
-```bash
-conda activate OpenRAG
-```
+\`\`\`
+Query OpenRAG using traditional RAG for "query text"
+Query OpenRAG using contextual RAG for "query text"
+Query OpenRAG using graph RAG for "query text"
+\`\`\`
 
-### Run tests
-```bash
-pytest tests/ -v
-```
+### Control Graph Traversal Depth
 
-### Start MCP server manually
-```bash
-python -m openrag.server
-```
+\`\`\`
+Query OpenRAG using graph RAG with max_hops 1 for "query text"
+\`\`\`
 
-### Check configuration
-```bash
-python -c "from openrag.config import get_settings; s = get_settings(); print(f'Model: {s.embedding_model}'); print(f'DB: {s.chroma_db_path}')"
-```
+Lower max_hops = faster, less context. Higher = slower, more context (range: 1-5).
 
-### View stats
-```python
-from src.openrag.tools.stats import get_stats_tool
-from src.openrag.config import get_settings
-# ... initialize vector_store ...
-result = await get_stats_tool(vector_store=vector_store, settings=get_settings())
-print(result)
-```
+## RAG Strategy Comparison
+
+| Feature | Traditional | Contextual | Graph |
+|---------|------------|------------|-------|
+| **Speed** | Fastest | Fast | Moderate |
+| **Setup** | None | Ollama | Ollama + Neo4j |
+| **Best For** | Direct facts | Complex queries | Relationships, entities |
+| **Processing Time** | Immediate | ~30-60 sec | 3-5 min |
+
+**Recommendation**: Start with Traditional RAG, add Contextual for better accuracy, add Graph for relationship-based queries.
 
 ## Troubleshooting
 
-### Import errors
-```bash
-# Ensure environment is activated
+### MCP Tools Not Appearing
+
+1. Check `~/.claude.json` syntax is valid JSON (find your project entry, verify the `openrag` key exists)
+2. Verify Python path with \`which python\` in OpenRAG environment
+3. Restart Claude Code completely
+4. Check Claude Code logs
+
+### Test Manually
+
+\`\`\`bash
 conda activate OpenRAG
+python -m openrag.server
+# Should start without errors
+# Press Ctrl+C to stop
+\`\`\`
 
-# Reinstall in editable mode
-pip install -e .
-```
+### Ollama Not Connecting
 
-### Model download fails
-```bash
-# Pre-download the model
-python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
-```
+\`\`\`bash
+# Check Ollama is running
+ollama list
 
-### ChromaDB permission error
-```bash
-# Fix permissions
-chmod -R 755 ./chroma_db
-```
+# Start if needed
+ollama serve
+\`\`\`
 
-### Claude Desktop not seeing server
-1. Check Python path in config is correct
-2. Check environment variables are set
-3. Restart Claude Desktop
-4. Check logs in Claude Desktop → Help → Show Logs
+### Neo4j Not Connecting
+
+\`\`\`bash
+# Check Neo4j status
+brew services list | grep neo4j
+
+# Start if needed
+brew services start neo4j
+
+# Verify password in MCP config matches Neo4j password
+\`\`\`
+
+### Background Processing Not Working
+
+Check server logs. Contextual and Graph RAG process in background:
+- Contextual: ~30-60 seconds per document
+- Graph: 3-5 minutes per document
+
+You can continue using the system while processing happens.
 
 ## Next Steps
 
-Now that you're up and running:
+- Read [Installation Guide](installation.md) for detailed setup options
+- Review [Architecture Overview](architecture.md) to understand the system
+- Check [CLAUDE.md](../CLAUDE.md) for development information
+- Explore [Lab Journal](lab_journal.md) for research notes
 
-1. **Read the [User Guide](user-guide.md)** - Learn all features
-2. **Check the [API Reference](api-reference.md)** - Understand the tools
-3. **Explore [Configuration](configuration.md)** - Optimize for your needs
-4. **Review [Testing Guide](TESTING.md)** - Advanced testing
+## Tips
 
-## Tips for Success
-
-### Performance
-- Use `all-MiniLM-L6-v2` for faster processing (development)
-- Use `all-mpnet-base-v2` for better quality (production)
-- Adjust chunk size based on your document type
-
-### Best Practices
-- Always use absolute file paths
-- Ingest related documents together
-- Use descriptive queries for better results
-- Monitor disk space as collection grows
-
-### Optimization
-- Batch ingest multiple documents
-- Use higher similarity thresholds for precision
-- Use lower thresholds for broad exploration
-- Periodically clean up unused documents
-
-## Getting Help
-
-- **Installation issues**: See [INSTALLATION.md](INSTALLATION.md)
-- **Usage questions**: See [User Guide](user-guide.md)
-- **Errors**: See [Troubleshooting](troubleshooting.md)
-- **API details**: See [API Reference](api-reference.md)
+1. **Start simple**: Use Traditional RAG first, add Contextual/Graph as needed
+2. **Use absolute paths**: Always use absolute paths in MCP config
+3. **Keep Ollama running**: For Contextual/Graph RAG, ensure \`ollama serve\` is running
+4. **Monitor disk space**: ChromaDB and Neo4j grow with more documents
+5. **Test incrementally**: Test each RAG type separately to isolate issues
 
 ---
 
-**Congratulations!** You now have a working RAG system for your personal documents.
-
-Last Updated: 2025-11-09
+**Last Updated**: 2026-03-06

@@ -1,142 +1,95 @@
 # OpenRAG Documentation
 
-Welcome to the OpenRAG documentation. This directory contains comprehensive guides for understanding, installing, using, and developing OpenRAG - an open-source MCP server for Retrieval Augmented Generation over personal documents.
+Concise, practical documentation for OpenRAG - a multi-strategy RAG MCP server for personal documents.
 
-## Documentation Overview
+## Essential Documentation
 
-### Getting Started
+### For New Users
 
-1. **[Installation Guide](INSTALLATION.md)** - Complete setup instructions
-   - Automated and manual installation
-   - Conda environment setup
-   - Dependency management
-   - Platform-specific notes
-   - Troubleshooting
+**[Installation Guide](installation.md)** - Complete setup and MCP configuration (15 min)
+- Environment setup (Python 3.12 + Conda)
+- Installing OpenRAG
+- **MCP server configuration for Claude Code** (critical)
+- External dependencies (Ollama, Neo4j)
+- Verification and troubleshooting
 
-2. **[Quick Start Guide](quick-start.md)** - Get up and running in minutes
-   - Basic configuration
-   - First document ingestion
-   - Running queries
-   - Integration with Claude Desktop
+**[Quick Start Guide](quick-start.md)** - Get started in 15 minutes
+- Quick installation steps
+- MCP configuration for Claude Code
+- Testing Traditional, Contextual, and Graph RAG
+- Common tasks and usage patterns
 
-### User Guides
+### Technical Reference
 
-3. **[User Guide](user-guide.md)** - Complete guide for end users
-   - Document ingestion workflow
-   - Semantic search capabilities
-   - Managing documents
-   - Configuration options
-   - Best practices
+**[Architecture Overview](architecture.md)** - System design and components
+- Three RAG strategies (Traditional, Contextual, Graph)
+- Component architecture
+- Data flow and storage strategy
+- Design decisions and performance notes
 
-4. **[Testing Guide](TESTING.md)** - Verify your installation
-   - Unit and integration tests
-   - Interactive testing
-   - Test workflows
-   - Verification checklist
+### Development
 
-### Technical Documentation
+**[CLAUDE.md](../CLAUDE.md)** - Development conventions and standards
+- Project structure and organization
+- Development workflow
+- Testing strategy
+- Code style and standards
 
-5. **[Architecture Overview](architecture.md)** - System design and components
-   - High-level architecture
-   - Component interactions
-   - Data flow
-   - Design decisions
-
-6. **[API Reference](api-reference.md)** - MCP tools and interfaces
-   - Tool specifications
-   - Input/output schemas
-   - Usage examples
-   - Error handling
-
-7. **[Developer Guide](developer-guide.md)** - Contributing to OpenRAG
-   - Development setup
-   - Code structure
-   - Testing strategy
-   - Contribution guidelines
-
-### Research and Design
-
-8. **[Lab Journal](lab_journal.md)** - Research findings and experiments
-   - MCP server architecture research
-   - ChromaDB evaluation
-   - Embedding model comparison
-   - Chunking strategy analysis
-
-9. **[Configuration Reference](configuration.md)** - All configuration options
-   - Environment variables
-   - Settings validation
-   - Default values
-   - Performance tuning
-
-### Additional Resources
-
-10. **[Setup Summary](SETUP_SUMMARY.md)** - Quick reference for setup
-11. **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
-12. **[FAQ](faq.md)** - Frequently asked questions
+**[Lab Journal](lab_journal.md)** - Research notes and design decisions
+- Experimental findings
+- Technology evaluations
+- Architecture evolution
 
 ## Quick Links
 
-### For New Users
-Start here: [Installation Guide](INSTALLATION.md) → [Quick Start Guide](quick-start.md) → [User Guide](user-guide.md)
+**New to OpenRAG?**
+1. [Installation Guide](installation.md) - Set up environment and MCP server
+2. [Quick Start Guide](quick-start.md) - Try it out in Claude Code
+3. [Architecture Overview](architecture.md) - Understand how it works
 
-### For Developers
-Start here: [Architecture Overview](architecture.md) → [Developer Guide](developer-guide.md) → [API Reference](api-reference.md)
-
-### For Researchers
-Start here: [Lab Journal](lab_journal.md) → [Architecture Overview](architecture.md)
+**Troubleshooting?**
+- Check [Installation Guide - Troubleshooting](installation.md#troubleshooting)
+- Review [Quick Start - Troubleshooting](quick-start.md#troubleshooting)
+- See [CLAUDE.md](../CLAUDE.md) for development issues
 
 ## Project Information
 
-- **Project**: OpenRAG
-- **Version**: 0.1.0 (Initial Release)
+- **Python**: 3.12 (NOT 3.13)
 - **License**: MIT
-- **Python**: 3.10+
-- **Main Dependencies**: ChromaDB, sentence-transformers, MCP SDK
+- **Main Dependencies**: ChromaDB, sentence-transformers, Ollama (optional), Neo4j (optional)
 
-## Documentation Standards
+## Three RAG Strategies
 
-All documentation in this directory follows the standards defined in [CLAUDE.md](../CLAUDE.md):
+| Strategy | Setup | Speed | Best For |
+|----------|-------|-------|----------|
+| **Traditional** | None | Fastest | Direct facts, quick setup |
+| **Contextual** | + Ollama | Fast | Complex queries, better accuracy |
+| **Graph** | + Ollama + Neo4j | Moderate | Relationships, multi-hop reasoning |
 
-- Clear, concise language
-- Complete code examples
-- Cross-references between documents
-- Google-style docstrings for code
-- Regular updates with code changes
+All strategies run in parallel - choose the best one for each query.
 
-## Contributing to Documentation
+## MCP Tools
 
-Found an error or want to improve the documentation?
+OpenRAG exposes 5 MCP tools for Claude Code:
 
-1. Check if the information is outdated
-2. Verify technical accuracy
-3. Update the relevant documentation file
-4. Ensure cross-references are updated
-5. Follow the documentation style guide
+1. `ingest_text` - Ingest text content into RAG system
+2. `query_documents` - Search with chosen RAG strategy
+3. `list_documents` - List all documents
+4. `delete_document` - Remove document
+5. `get_stats` - System statistics
 
-## Documentation Status
+See [Quick Start Guide](quick-start.md) for usage examples.
 
-| Document | Status | Last Updated |
-|----------|--------|--------------|
-| Installation Guide | Complete | 2025-11-09 |
-| Testing Guide | Complete | 2025-11-09 |
-| Setup Summary | Complete | 2025-11-09 |
-| Lab Journal | Active Research | 2025-11-08 |
-| Quick Start Guide | New | 2025-11-09 |
-| User Guide | New | 2025-11-09 |
-| Architecture Overview | New | 2025-11-09 |
-| API Reference | New | 2025-11-09 |
-| Developer Guide | New | 2025-11-09 |
-| Configuration Reference | New | 2025-11-09 |
-| Troubleshooting | New | 2025-11-09 |
-| FAQ | New | 2025-11-09 |
+## Contributing
 
-## Need Help?
+Documentation follows these principles:
+- **Concise**: Get to the point quickly
+- **Practical**: Focus on what users need to do
+- **Accurate**: Keep in sync with code changes
+- **Current**: Update dates when modified
 
-- Check the [FAQ](faq.md) for common questions
-- Review [Troubleshooting](troubleshooting.md) for common issues
-- Consult the [User Guide](user-guide.md) for usage instructions
-- See the [Developer Guide](developer-guide.md) for development questions
+Found an issue? Update the relevant file and verify cross-references.
 
 ---
 
-Last Updated: 2025-11-09
+**Last Updated**: 2026-03-06
