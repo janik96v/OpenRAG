@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 print("=" * 80)
-print("OPENRAG QUICK TEST")
+print("TRADITIONAL RAG QUICK TEST")
 print("=" * 80)
 
 # Test 1: Imports
@@ -19,13 +19,13 @@ try:
     from src.openrag.core.vector_store import VectorStore
     from src.openrag.models.schemas import Document, DocumentChunk, DocumentMetadata
     from src.openrag.config import Settings
-    print("✅ All imports successful")
+    print("All imports successful")
 except Exception as e:
-    print(f"❌ Import failed: {e}")
+    print(f"Import failed: {e}")
     sys.exit(1)
 
 # Test 2: Configuration
-print("\n⚙️  Test 2: Testing configuration...")
+print("\nTest 2: Testing configuration...")
 try:
     settings = Settings(
         chroma_db_path="./tests/test_chroma_db",
@@ -33,12 +33,12 @@ try:
         chunk_size=100,
         chunk_overlap=20,
     )
-    print(f"✅ Settings loaded:")
+    print(f"Settings loaded:")
     print(f"   - ChromaDB: {settings.chroma_db_path}")
     print(f"   - Model: {settings.embedding_model}")
     print(f"   - Chunk size: {settings.chunk_size}")
 except Exception as e:
-    print(f"❌ Configuration failed: {e}")
+    print(f"Configuration failed: {e}")
     sys.exit(1)
 
 # Test 3: Chunker
@@ -54,7 +54,7 @@ try:
     """
 
     chunks = chunker.chunk_text(test_text)
-    print(f"✅ Chunker working:")
+    print(f"Chunker working:")
     print(f"   - Input: {len(test_text)} chars, {chunker.count_tokens(test_text)} tokens")
     print(f"   - Output: {len(chunks)} chunks")
 
@@ -63,17 +63,17 @@ try:
         print(f"   - Chunk {i}: {tokens} tokens")
 
 except Exception as e:
-    print(f"❌ Chunker failed: {e}")
+    print(f"Chunker failed: {e}")
     import traceback
     traceback.print_exc()
     sys.exit(1)
 
 # Test 4: Embedding Model
-print("\n🧮 Test 4: Testing embedding model...")
+print("\nTest 4: Testing embedding model...")
 print("   (This may take a moment on first run - downloading model...)")
 try:
     embedding_model = EmbeddingModel(model_name="all-MiniLM-L6-v2")
-    print(f"✅ Embedding model loaded:")
+    print(f"Embedding model loaded:")
     print(f"   - Dimension: {embedding_model.get_embedding_dimension()}")
 
     # Test embedding
@@ -83,19 +83,19 @@ try:
     print(f"   - Embedding shape: {len(embeddings[0])} dimensions")
 
 except Exception as e:
-    print(f"❌ Embedding model failed: {e}")
+    print(f"Embedding model failed: {e}")
     import traceback
     traceback.print_exc()
     sys.exit(1)
 
 # Test 5: Vector Store
-print("\n💾 Test 5: Testing vector store...")
+print("\nTest 5: Testing vector store...")
 try:
     vector_store = VectorStore(
         persist_directory=Path("./tests/test_chroma_db"),
         embedding_model=embedding_model,
     )
-    print("✅ Vector store initialized")
+    print("Vector store initialized")
 
     # Create test document
     metadata = DocumentMetadata(
@@ -134,13 +134,13 @@ try:
     print(f"   - Document deleted")
 
 except Exception as e:
-    print(f"❌ Vector store failed: {e}")
+    print(f"Vector store failed: {e}")
     import traceback
     traceback.print_exc()
     sys.exit(1)
 
 # Test 6: Full Workflow (Async)
-print("\n🔄 Test 6: Testing async tools...")
+print("\nTest 6: Testing async tools...")
 try:
     import asyncio
     from openrag.tools.ingest import ingest_text_tool
@@ -168,6 +168,9 @@ try:
             document_name="test_python.txt",
             vector_store=vs,
             chunker=ch,
+            contextual_processor=None,  # Not testing contextual processing here
+            graph_processor=None,  # Not testing graph processing here
+            task_manager=None,  # Not testing task manager here
         )
         assert result['status'] == 'success', f"Ingest failed: {result}"
         doc_id = result['document_id']
@@ -185,30 +188,28 @@ try:
         # Stats
         result = await get_stats_tool(vector_store=vs, settings=settings)
         assert result['status'] == 'success', f"Stats failed: {result}"
-        print(f"   - Stats: {result['statistics']['total_chunks']} chunks")
+        stats = result['statistics']
+        total_chunks = stats.get('traditional', {}).get('chunks', 0) + stats.get('contextual', {}).get('chunks', 0)
+        print(f"   - Stats: {total_chunks} total chunks")
 
         # Clean up
         vs.delete_document(doc_id)
-        test_file.unlink()
 
     asyncio.run(test_async())
-    print("✅ Async tools working")
+    print("Async tools working")
 
 except Exception as e:
-    print(f"❌ Async tools failed: {e}")
+    print(f"Async tools failed: {e}")
     import traceback
     traceback.print_exc()
-    # Clean up
-    if test_file.exists():
-        test_file.unlink()
     sys.exit(1)
 
 print("\n" + "=" * 80)
-print("✅ ALL TESTS PASSED!")
+print("ALL TESTS PASSED!")
 print("=" * 80)
-print("\n🎉 OpenRAG implementation is working correctly!")
+print("\nOpenRAG implementation is working correctly!")
 print("\nNext steps:")
 print("1. Run full test suite: pytest tests/ -v")
 print("2. Test with your own documents")
 print("3. Integrate with Claude Desktop (see README.md)")
-print("\n📖 See TESTING.md for more detailed testing options")
+print("\n See TESTING.md for more detailed testing options")
