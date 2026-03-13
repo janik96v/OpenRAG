@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from ..config import Settings
 from ..core.chunker import TextChunker
 from ..core.contextual_processor import ContextualProcessor
 from ..core.graph_processor import GraphProcessor
@@ -21,17 +22,18 @@ async def ingest_text_tool(
     document_name: str,
     vector_store: GraphVectorStore,
     chunker: TextChunker,
-    contextual_processor: ContextualProcessor | None,
-    graph_processor: GraphProcessor | None,
-    task_manager: BackgroundTaskManager | None,
+    contextual_processor: ContextualProcessor | None = None,
+    graph_processor: GraphProcessor | None = None,
+    task_manager: BackgroundTaskManager | None = None,
+    settings: Settings | None = None,
 ) -> dict[str, Any]:
     """
     Ingest raw text content into traditional, contextual, and graph RAG systems.
 
     This tool accepts raw text content, chunks it, and:
-    1. Immediately stores it in the traditional RAG collection (blocking)
-    2. If available, starts background processing for contextual RAG (non-blocking)
-    3. If available, starts background processing for graph RAG (non-blocking)
+    1. Immediately stores it in the traditional RAG collection if enabled (blocking)
+    2. If available and enabled, starts background processing for contextual RAG (non-blocking)
+    3. If available and enabled, starts background processing for graph RAG (non-blocking)
 
     The function returns immediately after traditional ingestion completes, while
     contextual and graph processing continue in the background (if enabled).
@@ -44,6 +46,8 @@ async def ingest_text_tool(
         contextual_processor: ContextualProcessor instance (None if Ollama unavailable)
         graph_processor: GraphProcessor instance (None if Neo4j/Ollama unavailable)
         task_manager: BackgroundTaskManager instance (None if background tasks disabled)
+        settings: Application settings for RAG type enable/disable flags.
+                  If None, all RAG types default to enabled.
 
     Returns:
         Dictionary with ingestion results and metadata
@@ -60,7 +64,7 @@ async def ingest_text_tool(
             "chunk_count": 42,
             "traditional_ingestion": "completed",
             "contextual_ingestion": "processing_in_background",
-            "graph_ingestion": "processing_in_background",
+            "graph_ingestion": "disabled",
             "message": "Successfully ingested report.pdf with 42 chunks..."
         }
     """
@@ -77,6 +81,11 @@ async def ingest_text_tool(
 
         document_name = document_name.strip()
         text = text.strip()
+
+        # Resolve RAG type enable flags (default to True if settings not provided)
+        traditional_enabled = settings.traditional_enabled if settings is not None else True
+        contextual_enabled = settings.contextual_enabled if settings is not None else True
+        graph_enabled = settings.graph_enabled if settings is not None else True
 
         logger.info(f"Processing text content for document: {document_name}")
 
@@ -110,22 +119,28 @@ async def ingest_text_tool(
             )
             document.chunks.append(chunk)
 
-        # Step 1: Add to TRADITIONAL collection immediately (blocking)
-        logger.info(f"Adding document to traditional collection: {document_name}")
-
-        # Check if vector_store supports rag_type parameter (GraphVectorStore/ContextualVectorStore)
-        # vs base VectorStore
-        if isinstance(vector_store, GraphVectorStore):
-            vector_store.add_document(document, rag_type=RAGType.TRADITIONAL)
+        # Step 1: Add to TRADITIONAL collection immediately (blocking) if enabled
+        traditional_status = "disabled"
+        if traditional_enabled:
+            logger.info(f"Adding document to traditional collection: {document_name}")
+            # Check if vector_store supports rag_type parameter (GraphVectorStore/ContextualVectorStore)
+            # vs base VectorStore
+            if isinstance(vector_store, GraphVectorStore):
+                vector_store.add_document(document, rag_type=RAGType.TRADITIONAL)
+            else:
+                # Base VectorStore doesn't have rag_type parameter
+                vector_store.add_document(document)
+            traditional_status = "completed"
         else:
-            # Base VectorStore doesn't have rag_type parameter
-            vector_store.add_document(document)
+            logger.info(f"Traditional RAG disabled by settings, skipping for: {document_name}")
 
-        # Step 2: Start CONTEXTUAL processing in background (non-blocking) if available
+        # Step 2: Start CONTEXTUAL processing in background (non-blocking) if available and enabled
         contextual_status = "not_available"
-        if contextual_processor is not None and task_manager is not None:
+        if not contextual_enabled:
+            contextual_status = "disabled"
+            logger.info(f"Contextual RAG disabled by settings, skipping for: {document_name}")
+        elif contextual_processor is not None and task_manager is not None:
             logger.info(f"Starting contextual processing in background for: {document_name}")
-
             # CRITICAL: Use task_manager.create_task() to prevent garbage collection
             task_manager.create_task(
                 _process_contextual_async(
@@ -140,11 +155,13 @@ async def ingest_text_tool(
         else:
             logger.info(f"Contextual RAG not available for {document_name} (Ollama not configured)")
 
-        # Step 3: Start GRAPH processing in background (non-blocking) if available
+        # Step 3: Start GRAPH processing in background (non-blocking) if available and enabled
         graph_status = "not_available"
-        if graph_processor is not None and task_manager is not None:
+        if not graph_enabled:
+            graph_status = "disabled"
+            logger.info(f"Graph RAG disabled by settings, skipping for: {document_name}")
+        elif graph_processor is not None and task_manager is not None:
             logger.info(f"Starting graph processing in background for: {document_name}")
-
             task_manager.create_task(
                 _process_graph_async(
                     document=document,
@@ -166,23 +183,33 @@ async def ingest_text_tool(
 
         logger.info(
             f"Successfully ingested {document_name} with {len(document.chunks)} chunks "
-            f"(traditional completed, contextual and graph processing in background)"
+            f"(traditional={traditional_status}, contextual={contextual_status}, "
+            f"graph={graph_status})"
         )
 
         # Return immediately (don't await background tasks!)
-        message_parts = [
-            f"Successfully ingested {document.metadata.filename} "
-            f"with {len(document.chunks)} chunks to traditional store."
-        ]
+        message_parts = []
+        if traditional_status == "completed":
+            message_parts.append(
+                f"Successfully ingested {document.metadata.filename} "
+                f"with {len(document.chunks)} chunks to traditional store."
+            )
+        elif traditional_status == "disabled":
+            message_parts.append("Traditional RAG disabled by settings.")
+
         if contextual_status == "processing_in_background":
             message_parts.append("Contextual processing running in background.")
         elif contextual_status == "not_available":
             message_parts.append("Contextual RAG not available (Ollama not configured).")
+        elif contextual_status == "disabled":
+            message_parts.append("Contextual RAG disabled by settings.")
 
         if graph_status == "processing_in_background":
             message_parts.append("Graph processing running in background.")
         elif graph_status == "not_available":
             message_parts.append("Graph RAG not available (Neo4j/Ollama not configured).")
+        elif graph_status == "disabled":
+            message_parts.append("Graph RAG disabled by settings.")
 
         return {
             "status": "success",
@@ -190,10 +217,10 @@ async def ingest_text_tool(
             "document_name": document.metadata.filename,
             "chunk_count": len(document.chunks),
             "text_size_bytes": document.metadata.file_size,
-            "traditional_ingestion": "completed",
+            "traditional_ingestion": traditional_status,
             "contextual_ingestion": contextual_status,
             "graph_ingestion": graph_status,
-            "message": " ".join(message_parts),
+            "message": " ".join(message_parts) if message_parts else "No RAG types enabled.",
         }
 
     except ValidationError as e:

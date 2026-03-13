@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from ..config import get_settings
 from ..core.graph_vector_store import GraphVectorStore
 from ..models.contextual_schemas import RAGType
 from ..utils.logger import setup_logger
@@ -14,7 +15,7 @@ async def query_documents_tool(
     query: str,
     vector_store: GraphVectorStore,
     max_results: int = 5,
-    min_similarity: float = 0.1,
+    min_similarity: float | None = None,
     rag_type: str = "traditional",
     max_hops: int = 2,
 ) -> dict[str, Any]:
@@ -55,6 +56,9 @@ async def query_documents_tool(
         }
     """
     try:
+        if min_similarity is None:
+            min_similarity = get_settings().min_similarity
+
         # Validate query
         logger.info(f"Validating query: '{query[:100]}...'")
         validated_query = validate_query(query)

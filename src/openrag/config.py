@@ -130,6 +130,15 @@ class Settings(BaseSettings):
         ),
     ]
 
+    # RAG type enable/disable toggles
+    traditional_enabled: Annotated[
+        bool, Field(default=True, description="Enable Traditional RAG ingestion")
+    ]
+
+    contextual_enabled: Annotated[
+        bool, Field(default=True, description="Enable Contextual RAG ingestion")
+    ]
+
     # Graph RAG configuration
     graph_enabled: Annotated[
         bool, Field(default=True, description="Enable Graph RAG functionality")
@@ -201,6 +210,17 @@ class Settings(BaseSettings):
             ge=1,
             le=50,
             description="Batch size for entity extraction",
+        ),
+    ]
+
+    # Query configuration
+    min_similarity: Annotated[
+        float,
+        Field(
+            default=0.1,
+            ge=0.0,
+            le=1.0,
+            description="Default minimum similarity score threshold for queries (0–1)",
         ),
     ]
 
@@ -288,6 +308,16 @@ class Settings(BaseSettings):
     def OLLAMA_FALLBACK_ENABLED(self) -> bool:
         """Get Ollama fallback enabled."""
         return self.ollama_fallback_enabled
+
+    @property
+    def TRADITIONAL_ENABLED(self) -> bool:
+        """Get Traditional RAG enabled status."""
+        return self.traditional_enabled
+
+    @property
+    def CONTEXTUAL_ENABLED(self) -> bool:
+        """Get Contextual RAG enabled status."""
+        return self.contextual_enabled
 
     @property
     def GRAPH_ENABLED(self) -> bool:
