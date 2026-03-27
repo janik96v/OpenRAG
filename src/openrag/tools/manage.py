@@ -1,8 +1,9 @@
-"""Document management MCP tools (list and delete)."""
+"""Document management MCP tools (list, delete, cancel ingestion)."""
 
 from typing import Any
 
 from ..core.contextual_vector_store import ContextualVectorStore
+from ..utils.async_tasks import BackgroundTaskManager
 from ..utils.logger import setup_logger
 from ..utils.validation import ValidationError, validate_document_id
 
@@ -123,3 +124,64 @@ async def delete_document_tool(
             "error": "delete_failed",
             "message": f"Failed to delete document: {str(e)}",
         }
+
+
+async def cancel_ingestion_tool(
+    rag_type: str,
+    task_manager: BackgroundTaskManager | None,
+) -> dict[str, Any]:
+    """
+    Cancel all running background ingestion tasks for a given RAG type.
+
+    Traditional RAG ingestion is synchronous and cannot be cancelled.
+    Only 'contextual' and 'graph' background tasks can be stopped.
+
+    Args:
+        rag_type: RAG type whose background tasks should be cancelled
+                  ('contextual' or 'graph')
+        task_manager: BackgroundTaskManager instance (None if background tasks disabled)
+
+    Returns:
+        Dictionary with cancellation result
+
+    Example Response:
+        {
+            "status": "success",
+            "rag_type": "contextual",
+            "tasks_cancelled": 2,
+            "message": "Cancelled 2 contextual background ingestion task(s)."
+        }
+    """
+    _VALID_TYPES = ("contextual", "graph")
+
+    if rag_type not in _VALID_TYPES:
+        return {
+            "status": "error",
+            "error": "validation_error",
+            "message": (
+                f"Invalid rag_type '{rag_type}'. "
+                f"Only {_VALID_TYPES} background tasks can be cancelled. "
+                "Traditional RAG is synchronous and cannot be cancelled."
+            ),
+        }
+
+    if task_manager is None:
+        return {
+            "status": "error",
+            "error": "not_available",
+            "message": (
+                "Background task manager is not available. "
+                "Ollama is required for contextual and graph RAG processing."
+            ),
+        }
+
+    cancelled = task_manager.cancel_by_prefix(f"{rag_type}_")
+
+    logger.info(f"Cancelled {cancelled} {rag_type} background ingestion task(s)")
+
+    return {
+        "status": "success",
+        "rag_type": rag_type,
+        "tasks_cancelled": cancelled,
+        "message": f"Cancelled {cancelled} {rag_type} background ingestion task(s).",
+    }

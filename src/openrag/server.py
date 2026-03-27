@@ -10,22 +10,24 @@ from mcp.types import Tool
 from .config import get_settings
 from .core.chunker import TextChunker
 from .core.contextual_processor import ContextualProcessor
-from .core.contextual_vector_store import ContextualVectorStore
 from .core.embedder import EmbeddingModel
+from .core.graph_processor import GraphProcessor
+from .core.graph_vector_store import GraphVectorStore
 from .core.ollama_client import OllamaClient
 from .tools.ingest import ingest_text_tool
-from .tools.manage import delete_document_tool, list_documents_tool
+from .tools.manage import cancel_ingestion_tool, delete_document_tool, list_documents_tool
 from .tools.query import query_documents_tool
 from .tools.stats import get_stats_tool
 from .utils.async_tasks import BackgroundTaskManager
 from .utils.logger import configure_root_logger, setup_logger
 
 # Global instances (initialized in main)
-vector_store: ContextualVectorStore | None = None
+vector_store: GraphVectorStore | None = None
 chunker: TextChunker | None = None
 embedding_model: EmbeddingModel | None = None
 ollama_client: OllamaClient | None = None
 contextual_processor: ContextualProcessor | None = None
+graph_processor: GraphProcessor | None = None
 task_manager: BackgroundTaskManager | None = None
 settings = get_settings()
 
@@ -81,7 +83,7 @@ def create_server() -> Server:
                 description=(
                     "Search for relevant document chunks using natural language query. "
                     "Returns the most semantically similar chunks with similarity scores. "
-                    "Supports both traditional and contextual RAG."
+                    "Supports traditional, contextual, and graph RAG."
                 ),
                 inputSchema={
                     "type": "object",
@@ -103,12 +105,22 @@ def create_server() -> Server:
                         "rag_type": {
                             "type": "string",
                             "description": (
-                                "Type of RAG to use: 'traditional' (default) or 'contextual'. "
-                                "Contextual RAG provides better results by adding document context "
-                                "to each chunk."
+                                "Type of RAG to use: 'traditional' (default), 'contextual', "
+                                "or 'graph'. Contextual RAG adds document context to chunks. "
+                                "Graph RAG uses entity relationships for multi-hop reasoning."
                             ),
-                            "enum": ["traditional", "contextual"],
+                            "enum": ["traditional", "contextual", "graph"],
                             "default": "traditional",
+                        },
+                        "max_hops": {
+                            "type": "integer",
+                            "description": (
+                                "Maximum graph traversal hops for Graph RAG (default: 2, "
+                                "range: 1-5). Only used when rag_type is 'graph'."
+                            ),
+                            "default": 2,
+                            "minimum": 1,
+                            "maximum": 5,
                         },
                     },
                     "required": ["query"],
@@ -153,6 +165,28 @@ def create_server() -> Server:
                     "properties": {},
                 },
             ),
+            Tool(
+                name="cancel_ingestion",
+                description=(
+                    "Cancel all running background ingestion tasks for a given RAG type "
+                    "('contextual' or 'graph'). Traditional RAG is synchronous and cannot "
+                    "be cancelled. Use this to stop long-running background processing."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "rag_type": {
+                            "type": "string",
+                            "enum": ["contextual", "graph"],
+                            "description": (
+                                "RAG type whose background tasks should be cancelled. "
+                                "Only 'contextual' and 'graph' run asynchronously."
+                            ),
+                        }
+                    },
+                    "required": ["rag_type"],
+                },
+            ),
         ]
 
     @server.call_tool()
@@ -192,7 +226,9 @@ def create_server() -> Server:
                     vector_store=vector_store,
                     chunker=chunker,
                     contextual_processor=contextual_processor,
+                    graph_processor=graph_processor,
                     task_manager=task_manager,
+                    settings=settings,
                 )
             elif name == "query_documents":
                 result = await query_documents_tool(
@@ -201,6 +237,7 @@ def create_server() -> Server:
                     max_results=arguments.get("max_results", 5),
                     min_similarity=arguments.get("min_similarity", 0.1),
                     rag_type=arguments.get("rag_type", "traditional"),
+                    max_hops=arguments.get("max_hops", 2),
                 )
             elif name == "list_documents":
                 result = await list_documents_tool(vector_store=vector_store)
@@ -213,6 +250,11 @@ def create_server() -> Server:
                 result = await get_stats_tool(
                     vector_store=vector_store,
                     settings=settings,
+                )
+            elif name == "cancel_ingestion":
+                result = await cancel_ingestion_tool(
+                    rag_type=arguments["rag_type"],
+                    task_manager=task_manager,
                 )
             else:
                 result = {
@@ -256,6 +298,7 @@ async def main() -> None:
         embedding_model, \
         ollama_client, \
         contextual_processor, \
+        graph_processor, \
         task_manager, \
         settings
 
@@ -283,7 +326,7 @@ async def main() -> None:
         logger.info(f"Loading embedding model: {settings.embedding_model}")
         embedding_model = EmbeddingModel(model_name=settings.embedding_model)
 
-        # Initialize Ollama client for context generation (optional)
+        # Initialize Ollama client for contextual/graph RAG (optional)
         try:
             logger.info(f"Initializing Ollama client at: {settings.OLLAMA_BASE_URL}")
             ollama_client = OllamaClient(
@@ -293,33 +336,72 @@ async def main() -> None:
             )
             logger.info(f"Ollama model: {settings.OLLAMA_CONTEXT_MODEL}")
 
-            # Initialize contextual processor
-            logger.info("Initializing contextual processor...")
-            contextual_processor = ContextualProcessor(
-                ollama_client=ollama_client,
-                context_model=settings.OLLAMA_CONTEXT_MODEL,
-                fallback_enabled=settings.OLLAMA_FALLBACK_ENABLED,
-            )
-
-            # Initialize task manager for background processing
+            # Initialize task manager for background processing (used by both contextual and graph)
             logger.info("Initializing background task manager...")
             task_manager = BackgroundTaskManager()
 
-            logger.info("Contextual RAG components initialized successfully")
+            # Initialize contextual processor only if enabled
+            if settings.contextual_enabled:
+                logger.info("Initializing contextual processor...")
+                contextual_processor = ContextualProcessor(
+                    ollama_client=ollama_client,
+                    context_model=settings.OLLAMA_CONTEXT_MODEL,
+                    fallback_enabled=settings.OLLAMA_FALLBACK_ENABLED,
+                )
+                logger.info("Contextual RAG components initialized successfully")
+            else:
+                contextual_processor = None
+                logger.info("Contextual RAG disabled by settings (contextual_enabled=false)")
         except Exception as e:
             logger.warning(
                 f"Failed to initialize Ollama client: {e}. "
-                "Contextual RAG features will be disabled. Traditional RAG remains available."
+                "Contextual and Graph RAG features will be disabled. "
+                "Traditional RAG remains available."
             )
             ollama_client = None
             contextual_processor = None
             task_manager = None
 
-        # Initialize contextual vector store (manages both traditional and contextual collections)
-        logger.info(f"Initializing contextual vector store at: {settings.chroma_db_path}")
-        vector_store = ContextualVectorStore(
+        # Initialize Graph RAG processor (optional)
+        try:
+            if settings.GRAPH_ENABLED and ollama_client is not None:
+                logger.info("Initializing Graph RAG processor...")
+                logger.info(f"Neo4j URI: {settings.NEO4J_URI}")
+                logger.info(f"Entity extraction model: {settings.GRAPH_ENTITY_MODEL}")
+
+                graph_processor = GraphProcessor(
+                    ollama_client=ollama_client,
+                    neo4j_uri=settings.NEO4J_URI,
+                    neo4j_username=settings.NEO4J_USERNAME,
+                    neo4j_password=settings.NEO4J_PASSWORD,
+                    neo4j_database=settings.NEO4J_DATABASE,
+                    entity_model=settings.GRAPH_ENTITY_MODEL,
+                    fallback_enabled=settings.OLLAMA_FALLBACK_ENABLED,
+                )
+
+                # Initialize Neo4j connection
+                await graph_processor.initialize()
+
+                logger.info("Graph RAG processor initialized successfully")
+            else:
+                logger.info(
+                    "Graph RAG disabled (requires graph_enabled=true and Ollama client)"
+                )
+                graph_processor = None
+        except Exception as e:
+            logger.warning(
+                f"Failed to initialize Graph RAG processor: {e}. "
+                "Graph RAG features will be disabled. "
+                "Traditional and Contextual RAG remain available."
+            )
+            graph_processor = None
+
+        # Initialize graph vector store (manages traditional, contextual, and graph collections)
+        logger.info(f"Initializing graph vector store at: {settings.chroma_db_path}")
+        vector_store = GraphVectorStore(
             persist_directory=Path(settings.chroma_db_path),
             embedding_model=embedding_model,
+            graph_processor=graph_processor,
             base_collection_name=settings.collection_base_name,
             max_batch_size=10000,
         )
@@ -330,11 +412,21 @@ async def main() -> None:
         logger.info(f"Chunk size: {settings.chunk_size} tokens")
         logger.info(f"Chunk overlap: {settings.chunk_overlap} tokens")
 
-        if contextual_processor is not None and task_manager is not None:
+        if not settings.traditional_enabled:
+            logger.info("Traditional RAG disabled by settings")
+
+        if not settings.contextual_enabled:
+            logger.info("Contextual RAG disabled by settings")
+        elif contextual_processor is not None and task_manager is not None:
             logger.info(f"Contextual RAG enabled with model: {settings.OLLAMA_CONTEXT_MODEL}")
-            logger.info(f"Background tasks: {task_manager.task_count}")
         else:
-            logger.info("Contextual RAG disabled (Ollama not available)")
+            logger.info("Contextual RAG enabled in settings but Ollama not available")
+
+        if graph_processor is not None:
+            logger.info(f"Graph RAG enabled with entity model: {settings.GRAPH_ENTITY_MODEL}")
+            logger.info(f"Graph max hops: {settings.GRAPH_MAX_HOPS}")
+        else:
+            logger.info("Graph RAG disabled (requires Ollama and Neo4j)")
 
         # Create and run server
         logger.info("Starting MCP server with stdio transport...")
@@ -350,6 +442,14 @@ async def main() -> None:
         logger.error(f"Server error: {str(e)}", exc_info=True)
         raise
     finally:
+        # Cleanup graph processor connection
+        if graph_processor is not None:
+            try:
+                await graph_processor.close()
+                logger.info("Graph processor connection closed")
+            except Exception as e:
+                logger.error(f"Error closing graph processor: {e}")
+
         logger.info("OpenRAG MCP Server stopped")
         logger.info("=" * 80)
 

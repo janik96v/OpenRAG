@@ -68,6 +68,7 @@ class ContextualVectorStore(VectorStore):
                 metadata={
                     "description": "Contextual RAG document chunks",
                     "rag_type": "contextual",
+                    "hnsw:space": "cosine",
                 },
             )
 

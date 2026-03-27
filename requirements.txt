@@ -7,6 +7,10 @@ pydantic
 pydantic-settings
 tiktoken
 
+# Graph RAG dependencies
+neo4j>=5.0.0
+neo4j-graphrag
+
 # Development and testing
 pytest
 pytest-asyncio

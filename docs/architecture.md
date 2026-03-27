@@ -1,452 +1,260 @@
 # Architecture Overview
 
-This document describes the high-level architecture of OpenRAG, explaining how components work together to provide RAG capabilities over personal documents.
+Concise overview of OpenRAG's architecture and design decisions.
 
 ## System Overview
 
-OpenRAG is an MCP (Model Context Protocol) server that enables AI assistants like Claude to perform semantic search over personal documents using vector embeddings and ChromaDB.
+OpenRAG is an MCP (Model Context Protocol) server implementing three parallel RAG strategies:
 
-### Core Design Principles
+1. **Traditional RAG**: Vector-based semantic search (ChromaDB + embeddings)
+2. **Contextual RAG**: Document-level context enhancement (+ Ollama)
+3. **Graph RAG**: Entity extraction and relationship mapping (+ Ollama + Neo4j)
 
-Following the principles defined in [CLAUDE.md](../CLAUDE.md):
+All strategies run in parallel, allowing users to choose the best approach for each query.
 
-- **KISS**: Simple, straightforward implementation
-- **YAGNI**: Features implemented only when needed
-- **Single Responsibility**: Each component has one clear purpose
-- **Dependency Inversion**: High-level modules depend on abstractions
-
-## Architecture Diagram
+## High-Level Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        MCP Client (Claude)                      │
-│                     (stdio/JSON-RPC protocol)                   │
-└────────────────────────┬────────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     MCP Server (server.py)                      │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                    Tool Router                           │   │
-│  │  - ingest_document    - query_documents                  │   │
-│  │  - list_documents     - delete_document                  │   │
-│  │  - get_stats                                             │   │
-│  └────┬──────────────────────┬──────────────────────────────┘   │
-└───────┼──────────────────────┼──────────────────────────────────┘
-        │                      │
-        ▼                      ▼
-┌──────────────────┐    ┌──────────────────┐
-│  Tools Layer     │    │  Configuration   │
-│  (tools/)        │    │  (config.py)     │
-│  - ingest.py     │    │  - Settings      │
-│  - query.py      │    │  - Validation    │
-│  - manage.py     │    └──────────────────┘
-│  - stats.py      │
-└────────┬─────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        Core Layer (core/)                       │
-│  ┌─────────────┐  ┌─────────────┐  ┌───────────────────────┐   │
-│  │  Chunker    │  │  Embedder   │  │   Vector Store        │   │
-│  │ (chunker.py)│  │(embedder.py)│  │  (vector_store.py)    │   │
-│  │             │  │             │  │                       │   │
-│  │ - Tiktoken  │  │ - Sentence  │  │ - ChromaDB Client     │   │
-│  │   counting  │  │   Transformers│ │ - Collection Mgmt    │   │
-│  │ - Recursive │  │ - all-mpnet │  │ - Query/Search        │   │
-│  │   splitting │  │   -base-v2  │  │                       │   │
-│  └─────────────┘  └─────────────┘  └───────────┬───────────┘   │
-└────────────────────────────────────────────────┼───────────────┘
-                                                  │
-                                                  ▼
-                                    ┌──────────────────────────┐
-                                    │   ChromaDB Storage       │
-                                    │   (Persistent SQLite)    │
-                                    │                          │
-                                    │  - Documents metadata    │
-                                    │  - Embeddings            │
-                                    │  - Chunks                │
-                                    └──────────────────────────┘
+Claude Code/Desktop (MCP Client)
+         ↓ (stdio/JSON-RPC)
+    MCP Server (server.py)
+         ↓
+    Tools Layer (ingest, query, manage, stats)
+         ↓
+┌────────┴────────┬─────────────────┬──────────────┐
+│   Traditional   │   Contextual    │   Graph      │
+│   RAG           │   RAG           │   RAG        │
+├─────────────────┼─────────────────┼──────────────┤
+│ Chunker         │ + Context       │ + Entity     │
+│ Embedder        │   Processor     │   Extractor  │
+│ VectorStore     │   (Ollama)      │   (Ollama)   │
+└────────┬────────┴────────┬────────┴──────┬───────┘
+         ↓                 ↓               ↓
+    ChromaDB          ChromaDB        ChromaDB
+    (base)         (contextual)    (graph) + Neo4j
 ```
 
-## Component Details
+## Core Components
 
-### 1. MCP Server Layer (`server.py`)
+### MCP Server (`server.py`)
 
-**Purpose**: Entry point that handles MCP protocol communication.
+- Exposes 5 MCP tools: `ingest_text`, `query_documents`, `list_documents`, `delete_document`, `get_stats`
+- Initializes all RAG strategy components on startup
+- Routes tool calls to appropriate handlers
+- Manages component lifecycle (esp. Neo4j connections)
 
-**Responsibilities**:
-- Initialize core components (chunker, embedder, vector store)
-- Register and expose MCP tools
-- Route tool calls to appropriate handlers
-- Handle errors and return structured responses
-- Manage server lifecycle
+### Tools Layer (`tools/`)
 
-**Key Design Decisions**:
-- Uses stdio transport for Claude Desktop integration
-- Async-first design for non-blocking operations
-- Global component initialization for efficiency
-- JSON-RPC 2.0 protocol compliance
+**ingest.py**: Ingests text content into all enabled RAG strategies
+- Traditional RAG: immediate processing
+- Contextual RAG: background context generation
+- Graph RAG: background entity extraction (3-5 min)
 
-**Code Structure**:
-```python
-# Server initialization
-def create_server() -> Server:
-    - Register tool definitions
-    - Set up tool call handlers
+**query.py**: Searches across RAG strategies
+- Supports `rag_type` parameter: "traditional", "contextual", "graph"
+- Graph RAG supports `max_hops` for graph traversal depth
 
-async def main() -> None:
-    - Initialize components
-    - Start server with stdio transport
-```
+**manage.py**: Document lifecycle management (list, delete)
 
-### 2. Tools Layer (`tools/`)
+**stats.py**: System statistics and configuration info
 
-**Purpose**: Implement the five MCP tools exposed to clients.
+### Core Layer (`core/`)
 
-#### Tool: `ingest_document` (`tools/ingest.py`)
-- **Input**: File path to .txt document
-- **Process**: Read → Chunk → Embed → Store
-- **Output**: Document ID, chunk count, status
-- **Error Handling**: File validation, encoding errors
+**chunker.py**: Token-aware text splitting
+- Uses tiktoken for accurate token counting
+- Default: 400 tokens/chunk, 60 token overlap
+- Recursive splitting on semantic boundaries
 
-#### Tool: `query_documents` (`tools/query.py`)
-- **Input**: Natural language query, max results, similarity threshold
-- **Process**: Embed query → Vector search → Rank results
-- **Output**: Ranked chunks with similarity scores
-- **Error Handling**: Empty query, no results
+**embedder.py**: Vector embedding generation
+- Uses sentence-transformers (local execution)
+- Default: `all-mpnet-base-v2` (768 dimensions)
+- Alternative: `all-MiniLM-L6-v2` (faster, smaller)
 
-#### Tool: `list_documents` (`tools/manage.py`)
-- **Input**: None
-- **Process**: Query metadata from vector store
-- **Output**: List of documents with metadata
-- **Error Handling**: Empty collection
+**vector_store.py**: Traditional RAG storage (ChromaDB base collection)
 
-#### Tool: `delete_document` (`tools/manage.py`)
-- **Input**: Document ID
-- **Process**: Remove document and all chunks
-- **Output**: Success/failure status
-- **Error Handling**: Invalid ID, deletion errors
+**contextual_processor.py**: Context generation using Ollama
+- Generates document-level context for each chunk
+- Improves accuracy for complex queries
 
-#### Tool: `get_stats` (`tools/stats.py`)
-- **Input**: None
-- **Process**: Gather system statistics
-- **Output**: Document count, chunk count, configuration
-- **Error Handling**: Collection access errors
+**contextual_vector_store.py**: Manages base + contextual collections
 
-### 3. Core Layer (`core/`)
+**graph_processor.py**: Entity and relationship extraction
+- Uses Ollama LLM for entity extraction
+- Stores entities/relationships in Neo4j
+- Supports fallback mode (no Ollama)
 
-#### TextChunker (`core/chunker.py`)
+**graph_vector_store.py**: Manages all three collections + graph traversal
+- Base collection (traditional RAG)
+- Contextual collection (contextual RAG)
+- Graph collection (graph RAG) + Neo4j queries
 
-**Purpose**: Split documents into optimal-sized chunks for embedding.
+**ollama_client.py**: HTTP client for Ollama API
+- Handles retries and timeouts
+- Used by contextual and graph processors
 
-**Strategy**: RecursiveCharacterTextSplitter
-- Default: 400 tokens per chunk
-- 15% overlap (60 tokens)
-- Hierarchical splitting on semantic boundaries
+**schemas.py**: Base document and chunk models
+- `DocumentChunk`: Individual text chunks with metadata
+- `DocumentMetadata`: Document-level information
+- `RAGType` enum: "traditional", "contextual", "graph"
 
-**Key Features**:
-- Token counting using tiktoken
-- Configurable separators
-- Metadata preservation
-- Character vs. token awareness
+**contextual_schemas.py**: Contextual RAG models
+- `ContextualChunk`: Chunks with document context
 
-**Implementation**:
-```python
-class TextChunker:
-    def chunk_text(text: str) -> list[str]:
-        - Split on paragraph boundaries
-        - Respect token limits
-        - Maintain overlap
-```
+**graph_schemas.py**: Graph RAG models
+- `Entity`: Extracted entities (name, type, description)
+- `Relationship`: Entity relationships (source, target, type)
+- `GraphChunk`: Chunks with entities and relationships
 
-**Design Rationale**:
-- 400 tokens balances context vs. precision
-- 15% overlap prevents information loss
-- Recursive splitting respects document structure
+### Configuration (`config.py`)
 
-#### EmbeddingModel (`core/embedder.py`)
-
-**Purpose**: Generate vector embeddings for text chunks.
-
-**Default Model**: `all-mpnet-base-v2`
-- 768-dimensional embeddings
-- Best quality among base models
-- ~420 MB model size
-
-**Alternative**: `all-MiniLM-L6-v2`
-- 384-dimensional embeddings
-- 5x faster, smaller footprint
-- ~80 MB model size
-
-**Key Features**:
-- Lazy loading (on first use)
-- Batch embedding support
-- Dimension reporting
-- Model caching
-
-**Implementation**:
-```python
-class EmbeddingModel:
-    def embed(texts: list[str]) -> list[list[float]]:
-        - Load model (cached)
-        - Generate embeddings
-        - Normalize vectors
-```
-
-**Design Rationale**:
-- sentence-transformers for quality and compatibility
-- Configurable model selection
-- Local execution (privacy-preserving)
-
-#### VectorStore (`core/vector_store.py`)
-
-**Purpose**: Manage persistent vector storage using ChromaDB.
-
-**Storage Strategy**:
-- PersistentClient for local storage
-- SQLite backend for metadata
-- Columnar storage for embeddings
-
-**Key Features**:
-- Collection management
-- Metadata filtering
-- Similarity search (cosine similarity)
-- Document-level operations
-- Statistics and monitoring
-
-**Implementation**:
-```python
-class VectorStore:
-    def add_document(document: Document) -> None:
-        - Store chunks with embeddings
-        - Save metadata
-        - Update indices
-
-    def search(query: str, n_results: int) -> list[tuple]:
-        - Embed query
-        - Vector similarity search
-        - Return ranked results
-```
-
-**Design Rationale**:
-- ChromaDB for simplicity and local-first approach
-- Persistent storage ensures data survives restarts
-- Metadata enables filtering and management
-
-### 4. Data Models (`models/schemas.py`)
-
-**Purpose**: Define data structures using Pydantic for validation.
-
-**Key Models**:
+Centralized settings using Pydantic with `.env` support:
 
 ```python
-class DocumentChunk:
-    - chunk_id: str (UUID)
-    - document_id: str
-    - content: str
-    - chunk_index: int
-    - metadata: dict
+# Core settings
+chroma_db_path: str = "./chroma_db"
+embedding_model: str = "all-mpnet-base-v2"
+chunk_size: int = 400
+chunk_overlap: int = 60
 
-class Document:
-    - document_id: str (UUID)
-    - metadata: DocumentMetadata
-    - chunks: list[DocumentChunk]
+# Contextual RAG
+ollama_base_url: str = "http://localhost:11434"
+ollama_context_model: str = "llama3.2:3b"
 
-class QueryResult:
-    - chunk: DocumentChunk
-    - similarity_score: float
-    - document_name: str
+# Graph RAG
+graph_enabled: bool = True
+neo4j_uri: str = "neo4j://localhost:7687"
+neo4j_username: str = "neo4j"
+neo4j_password: str  # from env
+graph_entity_model: str = "llama3.2:3b"
+graph_max_hops: int = 2
 ```
 
-**Design Rationale**:
-- Pydantic v2 for fast validation
-- Type safety throughout codebase
-- Serialization support for MCP responses
+### Utilities (`utils/`)
 
-### 5. Configuration (`config.py`)
-
-**Purpose**: Centralized settings management with validation.
-
-**Settings**:
-```python
-class Settings(BaseSettings):
-    chroma_db_path: str = "./chroma_db"
-    embedding_model: str = "all-mpnet-base-v2"
-    chunk_size: int = 400
-    chunk_overlap: int = 60
-    log_level: str = "INFO"
-```
-
-**Features**:
-- Environment variable support (.env)
-- Validation with constraints
-- Singleton pattern for consistency
-- Path creation and validation
-
-### 6. Utilities (`utils/`)
-
-#### Logger (`utils/logger.py`)
-- Structured logging to stderr (MCP requirement)
-- Configurable log levels
-- Context-aware messages
-
-#### Validation (`utils/validation.py`)
-- File path validation
-- Input sanitization
-- Error message formatting
+**logger.py**: Logging to stderr (MCP requirement)
+**validation.py**: Input validation and sanitization
+**async_tasks.py**: Background task manager for Contextual/Graph RAG
 
 ## Data Flow
 
-### Document Ingestion Flow
+### Ingestion Flow
+
+When `ingest_text` is called, all three RAG types are triggered in a single pass:
 
 ```
-1. User calls ingest_document tool
-   ↓
-2. Validate file path and read content
-   ↓
-3. Chunker splits text into chunks (400 tokens)
-   ↓
-4. Embedder generates vectors for each chunk
-   ↓
-5. VectorStore saves chunks + embeddings + metadata
-   ↓
-6. Return document ID and statistics
+ingest_text tool
+  → Chunker (400 tokens, 60 overlap)
+  │
+  ├── [BLOCKING] Traditional RAG
+  │     → Embedder (vector generation)
+  │     → ChromaDB base collection
+  │     → Return document_id + stats  ← MCP responds here
+  │
+  ├── [BACKGROUND, concurrent] Contextual RAG       (~30-60 sec)
+  │     → Generate document context per chunk (Ollama)
+  │     → Store in contextual collection
+  │
+  └── [BACKGROUND, concurrent] Graph RAG            (~3-5 min)
+        → Extract entities per chunk (Ollama)
+        → Extract relationships per chunk (Ollama)
+        → Store in Neo4j + graph collection
 ```
+
+**Key details:**
+- Traditional ingestion is **synchronous** (`add_document` blocks until complete)
+- Contextual and Graph tasks are launched via `asyncio.create_task()` — they start **concurrently** and do **not** depend on each other
+- The MCP tool returns immediately after traditional ingestion; background tasks continue running
+- `BackgroundTaskManager` holds strong references to prevent garbage collection
 
 ### Query Flow
 
 ```
-1. User calls query_documents tool
-   ↓
-2. Embedder generates vector for query
-   ↓
-3. VectorStore performs similarity search
-   ↓
-4. Rank results by cosine similarity
-   ↓
-5. Filter by minimum similarity threshold
-   ↓
-6. Return top N results with scores
+query_documents tool
+  → Choose RAG type (traditional/contextual/graph)
+  → Embed query
+  → Search appropriate collection(s)
+  → (Graph only) Traverse Neo4j graph (max_hops)
+  → Return ranked results with scores
 ```
 
-## Design Decisions
+## Multi-Collection Storage Strategy
+
+OpenRAG uses separate ChromaDB collections for each RAG type:
+
+1. **Base collection** (`documents`): Traditional RAG chunks + embeddings
+2. **Contextual collection** (`documents_contextual`): Chunks with document context
+3. **Graph collection** (`documents_graph`): Chunks with entity/relationship metadata
+
+Plus **Neo4j graph database** for entity-relationship storage (Graph RAG only).
+
+This allows:
+- Parallel ingestion to all strategies
+- Independent querying of each strategy
+- Gradual adoption (start with Traditional, add Contextual/Graph later)
+
+## Key Design Decisions
+
+### Why Three RAG Strategies?
+
+Different queries benefit from different approaches:
+- **Traditional**: Fast, direct fact retrieval
+- **Contextual**: Better accuracy when document context matters
+- **Graph**: Multi-hop reasoning, finding relationships
 
 ### Why MCP?
-- **Standardized protocol** for AI-tool integration
-- **Claude Desktop support** out of the box
-- **Extensibility** for future features
-- **Clean separation** between AI and tooling
 
-### Why ChromaDB?
-- **Local-first** (privacy-preserving)
-- **Simple API** (easy to use)
-- **Persistent storage** (SQLite backend)
-- **No external services** required
+- Standardized protocol for AI-tool integration
+- Claude Desktop/Code support out of the box
+- Clean separation between AI and tooling
 
-### Why sentence-transformers?
-- **State-of-the-art** embedding quality
-- **Local execution** (no API costs)
-- **Flexible model selection** (speed vs. quality)
-- **Active community** and updates
+### Why Local-First?
 
-### Why Recursive Chunking?
-- **Industry standard** (proven approach)
-- **Respects structure** (paragraphs, sentences)
-- **Configurable** (adapts to document types)
-- **Good baseline** (easy to optimize from)
+- **Privacy**: All data stays on your machine
+- **No API costs**: Local embeddings and LLMs (optional)
+- **Offline capable**: Works without internet (after setup)
 
-## Performance Characteristics
+### Why Background Processing?
 
-### Throughput
-- **Ingestion**: ~1-2 pages/second (depends on embedding model)
-- **Query**: ~100-500ms per query (depends on collection size)
-- **Scaling**: Linear with document count (SQLite limitations)
+Contextual and Graph RAG use LLMs which take time:
+- Contextual: ~30-60 seconds per document
+- Graph: 3-5 minutes per document (entity extraction)
 
-### Memory Usage
-- **Base**: ~500 MB (Python + dependencies)
-- **Embedding Model**: 80 MB (MiniLM) or 420 MB (mpnet)
-- **ChromaDB**: Scales with collection size
+Background processing allows immediate ingestion response while processing continues.
 
-### Storage
-- **Embeddings**: ~3 KB per chunk (768 dimensions)
-- **Metadata**: ~1 KB per chunk (depends on content)
-- **Growth Rate**: ~4 KB per chunk on average
+## Performance Notes
 
-## Scalability Considerations
+### Traditional RAG
+- Ingestion: Immediate (~1-2 sec for typical document)
+- Query: Fast (~100-500ms)
 
-### Current Limitations
-- **Single writer**: SQLite backend limits concurrent writes
-- **In-memory search**: Collection loaded into memory
-- **No sharding**: Single collection per instance
+### Contextual RAG
+- Ingestion: ~30-60 seconds (background)
+- Query: Fast (~100-500ms)
+- Requires: Ollama running
 
-### Future Enhancements
-- **Client-server mode**: For multi-user scenarios
-- **Batch processing**: Parallel ingestion
-- **Index optimization**: Faster search for large collections
-- **Caching**: Query result caching
+### Graph RAG
+- Ingestion: 3-5 minutes (background, LLM-intensive)
+- Query: Moderate (~500ms-2sec with graph traversal)
+- Requires: Ollama + Neo4j running
 
-## Security Considerations
+## Testing
 
-### Current Implementation
-- **File path validation**: Prevent directory traversal
-- **Input sanitization**: Prevent injection attacks
-- **Local execution**: No external API calls
-- **Metadata isolation**: Documents stored separately
+Tests are organized by RAG type:
+- `tests/test_*.py`: Unit tests for components
+- `tests/test_*_integration.py`: Integration tests
+- `quick_test_normalRAG.py`: Traditional RAG end-to-end
+- `quick_test_contextualRAG.py`: Contextual RAG end-to-end
+- `quick_test_graphRAG.py`: Graph RAG end-to-end
 
-### Best Practices
-- **Validate inputs**: All tool parameters validated
-- **Fail fast**: Early error detection
-- **Log to stderr**: Separation from protocol output
-- **Limited permissions**: Read-only file access
-
-## Extension Points
-
-### Adding New Tools
-1. Define tool in `tools/`
-2. Register in `server.py`
-3. Add input schema
-4. Implement handler
-5. Add tests
-
-### Supporting New File Types
-1. Add parser in `utils/`
-2. Update `ingest.py` validation
-3. Extend DocumentMetadata
-4. Add type-specific chunking
-
-### Alternative Embedding Models
-1. Update `embedder.py`
-2. Add model configuration
-3. Handle dimension differences
-4. Update documentation
-
-## Testing Strategy
-
-### Unit Tests
-- Individual components tested in isolation
-- Mock external dependencies
-- Focus on edge cases
-
-### Integration Tests
-- Test component interactions
-- Use temporary ChromaDB instance
-- Validate full workflows
-
-### End-to-End Tests
-- Test MCP protocol integration
-- Verify tool functionality
-- Check error handling
-
-See [Testing Guide](TESTING.md) for details.
+Run: `pytest tests/ -v`
 
 ## Related Documentation
 
-- [Developer Guide](developer-guide.md) - Contributing to the codebase
-- [API Reference](api-reference.md) - Tool specifications
-- [Configuration Reference](configuration.md) - All settings explained
-- [Lab Journal](lab_journal.md) - Research and design decisions
+- [Installation Guide](installation.md) - Setup and configuration
+- [Quick Start Guide](quick-start.md) - Get started in 15 minutes
+- [CLAUDE.md](../CLAUDE.md) - Development conventions
+- [Lab Journal](lab_journal.md) - Research notes and decisions
 
 ---
 
-Last Updated: 2025-11-09
+**Last Updated**: 2026-03-06

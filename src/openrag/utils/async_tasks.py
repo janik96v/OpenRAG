@@ -76,6 +76,25 @@ class BackgroundTaskManager:
             # Log unexpected exceptions from background tasks
             logger.error(f"Background task failed: {task.get_name()}", exc_info=True)
 
+    def cancel_by_prefix(self, prefix: str) -> int:
+        """
+        Cancel all tasks whose name starts with the given prefix.
+
+        Args:
+            prefix: Task name prefix to match (e.g., "contextual_" or "graph_")
+
+        Returns:
+            Number of tasks that were cancelled
+        """
+        cancelled = 0
+        for task in list(self._tasks):
+            name = task.get_name()
+            if name and name.startswith(prefix) and not task.done():
+                task.cancel()
+                cancelled += 1
+        logger.info(f"Cancelled {cancelled} tasks with prefix '{prefix}'")
+        return cancelled
+
     def cancel_all(self) -> None:
         """Cancel all pending background tasks."""
         logger.info(f"Cancelling {len(self._tasks)} background tasks")

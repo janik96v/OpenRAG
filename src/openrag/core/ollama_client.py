@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import ollama
@@ -35,9 +36,43 @@ class OllamaClient:
         self.base_url = base_url
         self.timeout = timeout
         self.max_retries = max_retries
-        self.client = ollama.AsyncClient(host=base_url)
+        # Use synchronous client to avoid event loop issues
+        self.client = ollama.Client(host=base_url)
+        self._executor = ThreadPoolExecutor(max_workers=4)
 
         logger.info(f"Initialized OllamaClient with base_url={base_url}, timeout={timeout}s")
+
+    def _sync_generate(
+        self,
+        prompt: str,
+        model: str,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.3,
+        max_tokens: int = 300,
+    ) -> str:
+        """
+        Synchronous wrapper for Ollama API call.
+
+        This runs in a thread pool to avoid blocking the event loop.
+        """
+        # Build messages
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        # Call synchronous Ollama API
+        response = self.client.chat(
+            model=model,
+            messages=messages,
+            options={
+                "temperature": temperature,
+                "num_predict": max_tokens,
+            },
+        )
+
+        # Extract response text
+        return response["message"]["content"]
 
     async def generate_response(
         self,
@@ -72,33 +107,23 @@ class OllamaClient:
                     f"Generating response with model={model}, attempt={attempt + 1}/{self.max_retries}"
                 )
 
-                # Build messages
-                messages = []
-                if system_prompt:
-                    messages.append({"role": "system", "content": system_prompt})
-                messages.append({"role": "user", "content": prompt})
-
-                # Call Ollama API with timeout
-                response = await asyncio.wait_for(
-                    self.client.chat(
-                        model=model,
-                        messages=messages,
-                        options={
-                            "temperature": temperature,
-                            "num_predict": max_tokens,
-                        },
-                    ),
-                    timeout=self.timeout,
+                # Run synchronous call in thread pool to avoid blocking
+                loop = asyncio.get_running_loop()
+                generated_text = await loop.run_in_executor(
+                    self._executor,
+                    self._sync_generate,
+                    prompt,
+                    model,
+                    system_prompt,
+                    temperature,
+                    max_tokens,
                 )
-
-                # Extract response text
-                generated_text = response["message"]["content"]
 
                 logger.debug(f"Successfully generated response ({len(generated_text)} chars)")
 
                 return generated_text
 
-            except (ConnectionError, asyncio.TimeoutError, Exception) as e:
+            except (ConnectionError, Exception) as e:
                 last_exception = e
                 attempt += 1
 

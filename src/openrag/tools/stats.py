@@ -42,18 +42,40 @@ async def get_stats_tool(
     try:
         logger.info("Collecting system statistics")
 
-        # Get vector store stats (both collections)
+        # Get vector store stats (all collections)
         store_stats = vector_store.get_stats()
 
         # Combine with configuration
+        # Handle both VectorStore (unique_documents/total_chunks) and
+        # ContextualVectorStore (traditional_documents/traditional_chunks) key formats
+        trad_docs = store_stats.get(
+            "traditional_documents", store_stats.get("unique_documents", 0)
+        )
+        trad_chunks = store_stats.get(
+            "traditional_chunks", store_stats.get("total_chunks", 0)
+        )
         stats = {
+            "total_documents": trad_docs,
+            "total_chunks": trad_chunks,
             "traditional": {
-                "documents": store_stats.get("traditional_documents", 0),
-                "chunks": store_stats.get("traditional_chunks", 0),
+                "enabled": settings.traditional_enabled,
+                "documents": trad_docs,
+                "chunks": trad_chunks,
             },
             "contextual": {
+                "enabled": settings.contextual_enabled,
                 "documents": store_stats.get("contextual_documents", 0),
                 "chunks": store_stats.get("contextual_chunks", 0),
+            },
+            "graph": {
+                "enabled": settings.graph_enabled,
+                "documents": store_stats.get("graph_documents", 0),
+                "chunks": store_stats.get("graph_chunks", 0),
+            },
+            "rag_types_enabled": {
+                "traditional": settings.traditional_enabled,
+                "contextual": settings.contextual_enabled,
+                "graph": settings.graph_enabled,
             },
             "storage_path": settings.chroma_db_path,
             "embedding_model": settings.embedding_model,
@@ -63,7 +85,8 @@ async def get_stats_tool(
         }
 
         logger.info(
-            f"Statistics: Traditional={stats['traditional']}, Contextual={stats['contextual']}"
+            f"Statistics: Traditional={stats['traditional']}, "
+            f"Contextual={stats['contextual']}, Graph={stats['graph']}"
         )
 
         return {

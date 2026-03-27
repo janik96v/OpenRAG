@@ -10,7 +10,7 @@ echo "=================================="
 
 # Check if conda is available
 if ! command -v conda &> /dev/null; then
-    echo "❌ Error: conda is not installed or not in PATH"
+    echo "Error: conda is not installed or not in PATH"
     echo "Please install Anaconda or Miniconda first:"
     echo "  https://docs.conda.io/en/latest/miniconda.html"
     exit 1
@@ -23,7 +23,7 @@ echo "✓ Conda found"
 # Check if environment already exists
 if conda env list | grep -q "^OpenRAG "; then
     echo ""
-    echo "⚠️  Warning: OpenRAG environment already exists"
+    echo "Warning: OpenRAG environment already exists"
     read -p "Do you want to remove and recreate it? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -37,23 +37,23 @@ fi
 
 # Create new conda environment
 echo ""
-echo "📦 Creating conda environment 'OpenRAG' with Python $PYTHON_VERSION..."
+echo "Creating conda environment 'OpenRAG' with Python $PYTHON_VERSION..."
 conda create -n OpenRAG python=$PYTHON_VERSION -y
 
 # Activate environment
 echo ""
-echo "🔄 Activating environment..."
+echo "Activating environment..."
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate OpenRAG
 
 # Upgrade pip
 echo ""
-echo "⬆️  Upgrading pip..."
+echo "Upgrading pip..."
 pip install --upgrade pip
 
 # Install core dependencies
 echo ""
-echo "📚 Installing core dependencies..."
+echo "Installing core dependencies..."
 echo "   (This may take several minutes, especially for PyTorch and sentence-transformers)"
 
 # Install requirements
@@ -64,18 +64,18 @@ echo ""
 read -p "Install development dependencies? (Y/n): " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-    echo "📚 Installing development dependencies..."
+    echo "Installing development dependencies..."
     pip install -r requirements-dev.txt
 fi
 
 # Install package in editable mode
 echo ""
-echo "📦 Installing OpenRAG in editable mode..."
+echo "Installing OpenRAG in editable mode..."
 pip install -e .
 
 # Verify installation
 echo ""
-echo "🔍 Verifying installation..."
+echo "Verifying installation..."
 python -c "
 import sys
 print(f'Python version: {sys.version}')
@@ -122,7 +122,7 @@ fi
 
 echo ""
 echo "=================================="
-echo "✅ Setup Complete!"
+echo "Setup Complete!"
 echo "=================================="
 echo ""
 echo "To activate the environment, run:"

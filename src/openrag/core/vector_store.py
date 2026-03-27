@@ -67,9 +67,10 @@ class VectorStore:
 
             # Get or create collection
             # CRITICAL: Don't specify embedding_function, we'll provide embeddings directly
+            # Use cosine distance so similarity = 1 - distance stays in [0, 1]
             self.collection = self.client.get_or_create_collection(
                 name=collection_name,
-                metadata={"description": "RAG document chunks"},
+                metadata={"description": "RAG document chunks", "hnsw:space": "cosine"},
             )
 
             logger.info(
