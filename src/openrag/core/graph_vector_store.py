@@ -71,6 +71,7 @@ class GraphVectorStore(ContextualVectorStore):
                 metadata={
                     "description": "Graph RAG document chunks with entity relationships",
                     "rag_type": "graph",
+                    "hnsw:space": "cosine",
                 },
             )
 
