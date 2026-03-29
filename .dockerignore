@@ -1,0 +1,42 @@
+.git
+.gitignore
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Data directories (mounted as volumes at runtime)
+chroma_db/
+tests/test_chroma*/
+
+# Development and docs
+docs/
+tests/
+*.md
+!README.md
+
+# Environment files (passed via docker run -e or docker-compose env_file)
+.env
+.env.*
+!.env.docker.example
+
+# Build artifacts
+*.egg-info
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Quick test scripts (not needed in container)
+quick_test_*.py
+setup_environment.sh

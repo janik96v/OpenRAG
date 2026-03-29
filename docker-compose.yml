@@ -1,0 +1,47 @@
+services:
+  openrag:
+    build: .
+    image: openrag-mcp
+    stdin_open: true
+    tty: true
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Override Neo4j URI to use docker-compose service name instead of localhost
+      - NEO4J_URI=neo4j://neo4j:7687
+      # Use absolute path inside container
+      - CHROMA_DB_PATH=/app/chroma_db
+      # Point Ollama to the host machine (where it runs alongside Docker)
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    volumes:
+      # ChromaDB data persisted on host (survives container updates)
+      - ./chroma_db:/app/chroma_db
+      # HuggingFace model cache (avoids re-downloading the embedding model on restart)
+      - huggingface_cache:/app/.cache
+    depends_on:
+      neo4j:
+        condition: service_healthy
+
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-openrag}
+    volumes:
+      # Neo4j data persisted in named Docker volume
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-openrag} 'RETURN 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    ports:
+      # Neo4j browser for debugging (optional, can be removed in production)
+      - "7474:7474"
+      # Bolt protocol port (only needed if connecting from host, e.g. for debugging)
+      - "7687:7687"
+
+volumes:
+  neo4j_data:
+  huggingface_cache:
