@@ -26,12 +26,12 @@ services:
   neo4j:
     image: neo4j:5-community
     environment:
-      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-openrag}
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-openrag1}
     volumes:
       # Neo4j data persisted in named Docker volume
       - neo4j_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-openrag} 'RETURN 1' || exit 1"]
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-openrag1} 'RETURN 1' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 12
