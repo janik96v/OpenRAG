@@ -53,18 +53,6 @@ docker compose up -d
 
 The MCP server and Neo4j start automatically. Neo4j data and ChromaDB data are persisted in Docker volumes and a local `./chroma_db` folder.
 
-### Option B: Standalone Container (Traditional RAG only — no Neo4j)
-
-```bash
-docker run --rm -i \
-  -v ./chroma_db:/app/chroma_db \
-  -e GRAPH_ENABLED=false \
-  -e CONTEXTUAL_ENABLED=false \
-  janik96v/openrag
-```
-
-> Pull from Docker Hub once the image is published — see [Publishing to Docker Hub](#publishing-to-docker-hub).
-
 ---
 
 ## Configuration
@@ -110,21 +98,29 @@ The model is downloaded on first startup and cached in a Docker volume — no re
 
 ### Claude Code
 
-Add to `~/.claude/config.json`:
+Claude Code stores MCP server config in `~/.claude.json` under your project's path. The easiest way to add it is via the CLI:
+
+```bash
+claude mcp add openrag -- docker compose \
+  -f /absolute/path/to/OpenRAG/docker-compose.yml \
+  run --rm -i openrag
+```
+
+This adds the entry to `~/.claude.json` automatically under the current project. Alternatively, open `~/.claude.json`, find your project key (e.g. `"/Users/you/projects/OpenRAG"`), and add to its `mcpServers` object:
 
 ```json
-{
-  "mcpServers": {
-    "openrag": {
-      "command": "docker",
-      "args": [
-        "compose",
-        "-f", "/absolute/path/to/OpenRAG/docker-compose.yml",
-        "run", "--rm", "-i", "openrag"
-      ]
-    }
-  }
+"openrag": {
+  "type": "stdio",
+  "command": "docker",
+  "args": [
+    "compose",
+    "-f", "/absolute/path/to/OpenRAG/docker-compose.yml",
+    "run", "--rm", "-i", "openrag"
+  ],
+  "env": {}
 }
+
+**IMPORTANT change "/absolute/path/to/OpenRAG/docker-compose.yml" to match your docker-compose.yml**
 ```
 
 ### Claude Desktop
@@ -132,6 +128,8 @@ Add to `~/.claude/config.json`:
 **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+Add to the `mcpServers` object in that file:
 
 ```json
 {
