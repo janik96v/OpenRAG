@@ -7,6 +7,9 @@ pydantic
 pydantic-settings
 tiktoken
 
+# Ollama Python client (required for Contextual and Graph RAG)
+ollama
+
 # Graph RAG dependencies
 neo4j>=5.0.0
 neo4j-graphrag
